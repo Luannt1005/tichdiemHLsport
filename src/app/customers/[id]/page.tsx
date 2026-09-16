@@ -21,6 +21,8 @@ import {
   History,
   X,
   Edit3,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 import { Customer, PointLot, PointTransaction, UserRole } from '@/types/database';
@@ -47,6 +49,8 @@ export default function CustomerDetailPage() {
   const [isRedeemOpen, setIsRedeemOpen] = useState(false);
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [adjustPoints, setAdjustPoints] = useState<number>(50);
   const [adjustReason, setAdjustReason] = useState('Thưởng điểm tri ân khách hàng thân thiết');
 
@@ -80,6 +84,24 @@ export default function CustomerDetailPage() {
       loadCustomerData();
     } catch (err: any) {
       error('Lỗi điều chỉnh', err.message);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!customer) return;
+    setIsDeleting(true);
+    try {
+      await loyaltyStore.deleteCustomer(customer.id);
+      try {
+        await fetch(`/api/customers/${customer.id}`, { method: 'DELETE' });
+      } catch (_) {}
+      success('Đã xóa khách hàng', `Khách hàng ${customer.name} đã được xóa thành công.`);
+      setIsDeleteOpen(false);
+      router.push('/customers');
+    } catch (err: any) {
+      error('Lỗi khi xóa khách hàng', err.message || 'Không thể xóa khách hàng này.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -170,6 +192,15 @@ export default function CustomerDetailPage() {
             >
               <Edit3 className="w-4 h-4 text-slate-500" />
               <span>Sửa thông tin</span>
+            </button>
+
+            <button
+              onClick={() => setIsDeleteOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200/60 transition-all"
+              title="Xóa hồ sơ khách hàng"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Xóa</span>
             </button>
           </div>
         </div>
@@ -590,6 +621,75 @@ export default function CustomerDetailPage() {
         initialCustomer={customer}
         onSuccess={loadCustomerData}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/30 backdrop-blur-xs animate-fade-in overflow-y-auto">
+            <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden my-auto animate-scale-in">
+              <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-rose-50 to-red-50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-xs">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Xác Nhận Xóa Khách Hàng</h3>
+                    <p className="text-xs text-slate-500">Hành động này không thể hoàn tác</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsDeleteOpen(false)}
+                  disabled={isDeleting}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-white/80 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4 text-xs">
+                <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200/80 text-rose-900 space-y-2">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-700 text-sm">
+                    <AlertTriangle className="w-4 h-4" />
+                    Cảnh báo xóa dữ liệu
+                  </div>
+                  <p className="text-xs text-rose-800 leading-relaxed">
+                    Bạn có chắc chắn muốn xóa khách hàng <strong>{customer.name}</strong> (SĐT: <strong>{customer.phone}</strong>) không?
+                  </p>
+                  <p className="text-[11px] text-rose-600">
+                    Toàn bộ số dư <strong>{customer.total_points} điểm</strong>, các lô điểm khả dụng và lịch sử giao dịch liên quan sẽ bị xóa hoàn toàn khỏi hệ thống.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteOpen(false)}
+                    disabled={isDeleting}
+                    className="px-4 py-2.5 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteCustomer}
+                    disabled={isDeleting}
+                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+                  >
+                    {isDeleting ? (
+                      <span>Đang xóa...</span>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        <span>Xác nhận xóa</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

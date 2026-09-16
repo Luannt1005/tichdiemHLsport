@@ -783,6 +783,20 @@ class LoyaltyStore {
     return customer;
   }
 
+  public async deleteCustomer(id: string): Promise<boolean> {
+    const index = this.customers.findIndex((c) => c.id === id);
+    if (index === -1) throw new Error('Không tìm thấy khách hàng cần xóa');
+
+    // Remove customer from store
+    this.customers.splice(index, 1);
+    // Remove related point lots and transactions
+    this.lots = this.lots.filter((l) => l.customer_id !== id);
+    this.transactions = this.transactions.filter((t) => t.customer_id !== id);
+
+    this.saveToLocalStorage();
+    return true;
+  }
+
   public async checkAndExpireLots(): Promise<{ lotsExpired: number; totalPointsExpired: number }> {
     const now = new Date();
     let expiredCount = 0;

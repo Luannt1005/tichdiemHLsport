@@ -40,6 +40,10 @@ export const loyaltyApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  deleteCustomer: (id: string) =>
+    fetchApi<any>(`/customers/${id}`, {
+      method: 'DELETE',
+    }),
 
   // Settings
   getSettings: () => fetchApi<any>('/settings'),
