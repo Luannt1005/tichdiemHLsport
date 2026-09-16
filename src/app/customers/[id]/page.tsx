@@ -193,15 +193,6 @@ export default function CustomerDetailPage() {
               <Edit3 className="w-4 h-4 text-slate-500" />
               <span>Sửa thông tin</span>
             </button>
-
-            <button
-              onClick={() => setIsDeleteOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200/60 transition-all"
-              title="Xóa hồ sơ khách hàng"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Xóa</span>
-            </button>
           </div>
         </div>
       </div>
@@ -604,6 +595,10 @@ export default function CustomerDetailPage() {
         onSuccess={(updated) => {
           setCustomer(updated);
           loadCustomerData();
+        }}
+        onDelete={() => {
+          setIsEditOpen(false);
+          setIsDeleteOpen(true);
         }}
       />
 

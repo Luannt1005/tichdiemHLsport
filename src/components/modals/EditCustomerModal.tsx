@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { User, Phone, Mail, FileText, X, Check, Edit3 } from 'lucide-react';
+import { User, Phone, Mail, FileText, X, Check, Edit3, Trash2 } from 'lucide-react';
 import { Customer } from '@/types/database';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 import { useToast } from '@/components/ui/Toast';
@@ -12,6 +12,7 @@ interface EditCustomerModalProps {
   onClose: () => void;
   customer: Customer;
   onSuccess?: (updated: Customer) => void;
+  onDelete?: () => void;
 }
 
 export function EditCustomerModal({
@@ -19,6 +20,7 @@ export function EditCustomerModal({
   onClose,
   customer,
   onSuccess,
+  onDelete,
 }: EditCustomerModalProps) {
   const { success, error } = useToast();
   const [mounted, setMounted] = useState(false);
@@ -144,29 +146,45 @@ export function EditCustomerModal({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {loading ? (
-                <span>Đang lưu...</span>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Lưu thay đổi</span>
-                </>
-              )}
-            </button>
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+            {onDelete ? (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-all"
+                title="Xóa hồ sơ khách hàng"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xóa hồ sơ</span>
+              </button>
+            ) : (
+              <div />
+            )}
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+              >
+                {loading ? (
+                  <span>Đang lưu...</span>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Lưu thay đổi</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

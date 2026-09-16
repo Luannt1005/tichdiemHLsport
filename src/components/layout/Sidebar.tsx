@@ -23,14 +23,14 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    title: 'Tổng quan',
-    href: '/',
-    icon: LayoutDashboard,
-  },
-  {
     title: 'Khách hàng',
     href: '/customers',
     icon: Users,
+  },
+  {
+    title: 'Tổng quan',
+    href: '/',
+    icon: LayoutDashboard,
   },
   {
     title: 'Lịch sử giao dịch',
@@ -93,9 +93,11 @@ export function Sidebar({
         />
       )}
 
-      {/* Sidebar Container with Court Green (#1B6C39) */}
+      {/* Sidebar Container with Court Green Gradient */}
       <aside
-        style={{ backgroundColor: '#1B6C39' }}
+        style={{
+          background: 'linear-gradient(180deg, #207D43 0%, #1B6C39 40%, #134F29 100%)',
+        }}
         className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col text-white transition-all duration-300 ease-in-out border-r border-[#15592e] shadow-xl ${
           collapsed ? 'w-20' : 'w-64'
         } ${
