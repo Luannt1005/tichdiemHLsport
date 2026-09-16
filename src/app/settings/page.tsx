@@ -82,21 +82,10 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
-            <Settings className="w-6 h-6 text-emerald-600" />
-            Cài Đặt Cấu Hình Tích Điểm
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Thiết lập tỷ lệ quy đổi tiền sân thành điểm, quy tắc làm tròn và thời hạn hết hạn
-          </p>
-        </div>
-
-        {/* Permission Pill */}
+      {/* Permission Pill */}
+      <div className="flex justify-end">
         <div
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold self-start sm:self-auto ${
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold ${
             role === 'ADMIN'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-amber-50 border-amber-200 text-amber-800'

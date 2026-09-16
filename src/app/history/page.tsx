@@ -46,21 +46,6 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
-            <History className="w-6 h-6 text-emerald-600" />
-            Lịch Sử Biến Động Điểm Toàn Hệ Thống
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Audit log ghi nhận đầy đủ mọi giao dịch tích điểm, khấu trừ, hết hạn và điều chỉnh
-          </p>
-        </div>
-        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
-          {transactions.length} bản ghi
-        </span>
-      </div>
 
       {/* Filter & Search Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">

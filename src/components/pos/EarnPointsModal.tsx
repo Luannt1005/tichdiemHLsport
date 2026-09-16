@@ -232,14 +232,12 @@ export function EarnPointsModal({
           )}
 
           {/* Amount Paid with .000 suffix right next to number */}
+          {/* Amount Paid with Green Theme */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-emerald-800 mb-1.5">
               Số tiền thanh toán tiền sân <span className="text-rose-500">*</span>
             </label>
-            <div
-              onClick={() => inputRef.current?.focus()}
-              className="flex items-center w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 focus-within:bg-white transition-all cursor-text"
-            >
+            <div className="relative flex items-center">
               <input
                 ref={inputRef}
                 type="text"
@@ -249,15 +247,12 @@ export function EarnPointsModal({
                   const clean = e.target.value.replace(/\D/g, '');
                   setAmountK(clean);
                 }}
+                onFocus={(e) => e.target.select()}
                 placeholder="0"
                 required
-                style={{
-                  width: amountK ? `${String(amountK).length + 0.1}ch` : '1.5ch',
-                  minWidth: '1.5ch',
-                }}
-                className="bg-transparent text-lg font-bold text-emerald-700 focus:outline-none p-0 m-0 text-left [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full pl-4 pr-12 py-2.5 bg-emerald-50/50 border-2 border-[#1B6C39] rounded-xl text-xl font-black text-[#1B6C39] placeholder:text-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:bg-white focus:border-[#1B6C39] transition-all"
               />
-              <span className="text-lg font-bold text-slate-400 select-none pointer-events-none ml-0.5">
+              <span className="absolute right-4 text-lg font-black text-[#1B6C39] select-none pointer-events-none">
                 k
               </span>
             </div>

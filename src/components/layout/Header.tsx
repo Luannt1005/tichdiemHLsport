@@ -83,32 +83,7 @@ export function Header({
 
       {/* Right section: System Status, Role Switcher, Account */}
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Reset Sample Data Button */}
-        <button
-          onClick={handleResetData}
-          title="Nạp lại dữ liệu mẫu 10 khách hàng"
-          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset Data Mẫu</span>
-        </button>
 
-        {/* Database Status Indicator */}
-        <div
-          title={
-            isLive
-              ? 'Đang kết nối Supabase PostgreSQL Live'
-              : 'Đang dùng Local Ledger Engine (Chạy file SQL trên Supabase để chuyển sang Live)'
-          }
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-            isLive
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-              : 'bg-amber-50 border-amber-200 text-amber-700'
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full animate-pulse ${isLive ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-          <span className="hidden sm:inline">{isLive ? 'Supabase Live' : 'Demo Ledger Ready'}</span>
-        </div>
 
         {/* Role Switcher Pill (Admin / Staff) */}
         <div className="relative">

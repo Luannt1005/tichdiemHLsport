@@ -84,27 +84,7 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top action bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-            Quản Lý Khách Hàng ({customers.length})
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Theo dõi danh sách hội viên, số dư điểm hiện có và lịch sử tích lũy
-          </p>
-        </div>
-
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Thêm Khách Hàng</span>
-        </button>
-      </div>
-
-      {/* Search & Filter Bar */}
+      {/* Search & Filter Bar + Add Button */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Search */}
         <div className="relative w-full md:w-80">
@@ -140,6 +120,15 @@ export default function CustomersPage() {
             </button>
           ))}
         </div>
+
+        {/* Add Customer Button */}
+        <button
+          onClick={() => setIsAddOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-sm transition-all shrink-0 w-full md:w-auto justify-center"
+        >
+          <UserPlus className="w-4 h-4" />
+          <span>Thêm Khách Hàng</span>
+        </button>
       </div>
 
       {/* Customer Table */}
