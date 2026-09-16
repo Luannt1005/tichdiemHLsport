@@ -158,7 +158,6 @@ export default function CustomersPage() {
                   <th className="py-3 px-4">Khách hàng</th>
                   <th className="py-3 px-4">Số điện thoại</th>
                   <th className="py-3 px-4 text-right">Điểm hiện tại</th>
-                  <th className="py-3 px-4 text-right">Sắp hết hạn (30n)</th>
                   <th className="py-3 px-4">Giao dịch gần nhất</th>
                   <th className="py-3 px-4 text-center">Trạng thái</th>
                   <th className="py-3 px-4 text-right">Thao tác</th>
@@ -190,19 +189,7 @@ export default function CustomersPage() {
                       <span className="text-sm font-black text-emerald-700">
                         {c.total_points.toLocaleString('vi-VN')}
                       </span>{' '}
-                      <span className="text-[10px] text-slate-400 font-normal">đ</span>
-                    </td>
-
-                    {/* Expiring Soon */}
-                    <td className="py-3.5 px-4 text-right">
-                      {c.expiring_soon_points ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
-                          <ClockAlert className="w-3 h-3 text-rose-500" />
-                          {c.expiring_soon_points} đ
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">0 đ</span>
-                      )}
+                      <span className="text-[10px] text-slate-400 font-normal">điểm</span>
                     </td>
 
                     {/* Last tx */}

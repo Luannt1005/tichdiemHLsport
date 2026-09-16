@@ -257,8 +257,8 @@ export function EarnPointsModal({
                 }}
                 className="bg-transparent text-lg font-bold text-emerald-700 focus:outline-none p-0 m-0 text-left [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <span className="text-lg font-bold text-slate-400 select-none pointer-events-none">
-                .000 ₫
+              <span className="text-lg font-bold text-slate-400 select-none pointer-events-none ml-0.5">
+                k
               </span>
             </div>
           </div>

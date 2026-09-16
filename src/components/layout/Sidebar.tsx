@@ -28,14 +28,14 @@ const navItems: NavItem[] = [
     icon: Users,
   },
   {
-    title: 'Tổng quan',
-    href: '/',
-    icon: LayoutDashboard,
-  },
-  {
     title: 'Lịch sử giao dịch',
     href: '/history',
     icon: History,
+  },
+  {
+    title: 'Tổng quan',
+    href: '/',
+    icon: LayoutDashboard,
   },
   {
     title: 'Cài đặt tích điểm',
