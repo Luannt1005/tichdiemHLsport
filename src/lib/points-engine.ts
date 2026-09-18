@@ -52,12 +52,25 @@ export function getDaysUntilExpiry(expiresAtStr: string): number {
 }
 
 /**
+ * Normalize Vietnamese phone number (strip whitespace, dots, dashes, convert +84/84 to 0)
+ */
+export function normalizePhone(phone: string): string {
+  let cleaned = (phone || '').replace(/[\s.\-()]/g, '');
+  if (cleaned.startsWith('+84')) {
+    cleaned = '0' + cleaned.slice(3);
+  } else if (cleaned.startsWith('84') && cleaned.length === 11) {
+    cleaned = '0' + cleaned.slice(2);
+  }
+  return cleaned;
+}
+
+/**
  * Validate Vietnamese phone number format
- * Valid formats: 10 digits starting with 03, 05, 07, 08, 09
+ * Valid formats: 10 digits starting with 0
  */
 export function isValidVietnamesePhone(phone: string): boolean {
-  const cleaned = phone.replace(/[\s.-]/g, '');
-  const phoneRegex = /^(0)(3|5|7|8|9)[0-9]{8}$/;
+  const cleaned = normalizePhone(phone);
+  const phoneRegex = /^0[1-9][0-9]{8}$/;
   return phoneRegex.test(cleaned);
 }
 

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 import { Customer } from '@/types/database';
-import { formatDateOnly, formatDateTime, isValidVietnamesePhone } from '@/lib/points-engine';
+import { formatDateOnly, formatDateTime, isValidVietnamesePhone, normalizePhone } from '@/lib/points-engine';
 import { EarnPointsModal } from '@/components/pos/EarnPointsModal';
 import { RedeemPointsModal } from '@/components/pos/RedeemPointsModal';
 import { createPortal } from 'react-dom';
@@ -64,19 +64,20 @@ export default function CustomersPage() {
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidVietnamesePhone(newPhone)) {
-      error('Lỗi SĐT', 'Số điện thoại không hợp lệ (cần 10 chữ số)');
+    const formattedPhone = normalizePhone(newPhone);
+    if (!isValidVietnamesePhone(formattedPhone)) {
+      error('Lỗi SĐT', 'Số điện thoại không hợp lệ (cần 10 chữ số, VD: 0901234567)');
       return;
     }
 
     try {
-      await loyaltyStore.createCustomer(newPhone.trim(), newName.trim(), newEmail.trim() || undefined);
+      await loyaltyStore.createCustomer(formattedPhone, newName.trim(), newEmail.trim() || undefined);
       success('Thành công', `Đã thêm khách hàng ${newName}`);
       setIsAddOpen(false);
       setNewName('');
       setNewPhone('');
       setNewEmail('');
-      loadCustomers();
+      await loadCustomers();
     } catch (err: any) {
       error('Lỗi tạo khách', err.message);
     }

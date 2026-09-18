@@ -545,10 +545,10 @@ const INITIAL_ALLOCATIONS: PointRedemptionAllocation[] = [
 
 // In-memory / browser store instance
 class LoyaltyStore {
-  private customers: Customer[] = [...INITIAL_CUSTOMERS];
-  private lots: PointLot[] = [...INITIAL_LOTS];
-  private transactions: PointTransaction[] = [...INITIAL_TRANSACTIONS];
-  private allocations: PointRedemptionAllocation[] = [...INITIAL_ALLOCATIONS];
+  private customers: Customer[] = [];
+  private lots: PointLot[] = [];
+  private transactions: PointTransaction[] = [];
+  private allocations: PointRedemptionAllocation[] = [];
   private settings: PointSetting = { ...DEFAULT_SETTING };
   private currentRole: UserRole = 'ADMIN';
   private hasCheckedSupabase: boolean = false;
@@ -575,12 +575,24 @@ class LoyaltyStore {
   private loadFromLocalStorage() {
     if (typeof window === 'undefined') return;
     try {
-      const c = localStorage.getItem('hl_loyalty_customers');
-      const l = localStorage.getItem('hl_loyalty_lots');
-      const t = localStorage.getItem('hl_loyalty_transactions');
-      const a = localStorage.getItem('hl_loyalty_allocations');
+      let c = localStorage.getItem('hl_loyalty_customers');
+      let l = localStorage.getItem('hl_loyalty_lots');
+      let t = localStorage.getItem('hl_loyalty_transactions');
+      let a = localStorage.getItem('hl_loyalty_allocations');
       const s = localStorage.getItem('hl_loyalty_settings');
       const r = localStorage.getItem('hl_loyalty_role');
+
+      // Purge old mock sample data if found in cache
+      if (c && c.includes('"id":"c-01"')) {
+        localStorage.removeItem('hl_loyalty_customers');
+        localStorage.removeItem('hl_loyalty_lots');
+        localStorage.removeItem('hl_loyalty_transactions');
+        localStorage.removeItem('hl_loyalty_allocations');
+        c = null;
+        l = null;
+        t = null;
+        a = null;
+      }
 
       if (c) this.customers = JSON.parse(c);
       if (l) this.lots = JSON.parse(l);
@@ -683,20 +695,38 @@ class LoyaltyStore {
 
   // CUSTOMERS
   public async getCustomers(query: string = '', filter: string = 'ALL'): Promise<Customer[]> {
-    this.syncAllCustomerBalances();
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
 
-    // If Supabase live, attempt Supabase fetch
+    // If Supabase live, fetch from Supabase
     if (this.isSupabaseLive) {
       try {
-        const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+        let q = supabase.from('customers').select('*').order('created_at', { ascending: false });
+        if (query.trim()) {
+          const s = query.trim();
+          q = q.or(`phone.ilike.%${s}%,name.ilike.%${s}%`);
+        }
+        const { data, error } = await q;
         if (!error && data) {
-          return data.map((c) => ({
+          let list = data as Customer[];
+          if (filter === 'HAS_POINTS') {
+            list = list.filter((c) => c.total_points > 0);
+          } else if (filter === 'NO_POINTS') {
+            list = list.filter((c) => c.total_points === 0);
+          }
+          this.customers = list;
+          return list.map((c) => ({
             ...c,
             expiring_soon_points: this.getCustomerExpiringPoints(c.id, 30),
           }));
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('Supabase fetch error, fallback to local', err);
+      }
     }
+
+    this.syncAllCustomerBalances();
 
     let result = [...this.customers].map((c) => ({
       ...c,
@@ -727,6 +757,22 @@ class LoyaltyStore {
   }
 
   public async getCustomerById(id: string): Promise<Customer | null> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      try {
+        const { data, error } = await supabase.from('customers').select('*').eq('id', id).maybeSingle();
+        if (!error && data) {
+          return {
+            ...data,
+            expiring_soon_points: this.getCustomerExpiringPoints(data.id, 30),
+          };
+        }
+      } catch (_) {}
+    }
+
     this.syncAllCustomerBalances();
     const c = this.customers.find((item) => item.id === id);
     if (!c) return null;
@@ -737,8 +783,25 @@ class LoyaltyStore {
   }
 
   public async getCustomerByPhone(phone: string): Promise<Customer | null> {
-    this.syncAllCustomerBalances();
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
     const cleaned = phone.replace(/[\s.-]/g, '');
+
+    if (this.isSupabaseLive) {
+      try {
+        const { data, error } = await supabase.from('customers').select('*').eq('phone', cleaned).maybeSingle();
+        if (!error && data) {
+          return {
+            ...data,
+            expiring_soon_points: this.getCustomerExpiringPoints(data.id, 30),
+          };
+        }
+      } catch (_) {}
+    }
+
+    this.syncAllCustomerBalances();
     const c = this.customers.find((item) => item.phone.replace(/[\s.-]/g, '') === cleaned);
     if (!c) return null;
     return {
@@ -748,6 +811,39 @@ class LoyaltyStore {
   }
 
   public async createCustomer(phone: string, name: string, email?: string): Promise<Customer> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    const cleaned = phone.replace(/[\s.-]/g, '');
+
+    if (this.isSupabaseLive) {
+      const { data, error } = await supabase
+        .from('customers')
+        .insert({
+          phone: cleaned,
+          name: name.trim(),
+          email: email?.trim() || null,
+          total_points: 0,
+          lifetime_points_earned: 0,
+          lifetime_points_used: 0,
+          status: 'ACTIVE',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('already exists')) {
+          throw new Error(`Số điện thoại ${phone} đã tồn tại trong hệ thống!`);
+        }
+        throw new Error(error.message || 'Lỗi tạo khách hàng trên Database');
+      }
+
+      this.customers.unshift(data);
+      this.saveToLocalStorage();
+      return data;
+    }
+
     const existing = await this.getCustomerByPhone(phone);
     if (existing) {
       throw new Error(`Số điện thoại ${phone} đã tồn tại trong hệ thống!`);
@@ -755,9 +851,9 @@ class LoyaltyStore {
 
     const newCustomer: Customer = {
       id: 'c-' + Math.random().toString(36).substring(2, 9),
-      phone,
-      name,
-      email: email || null,
+      phone: cleaned,
+      name: name.trim(),
+      email: email?.trim() || null,
       total_points: 0,
       lifetime_points_earned: 0,
       lifetime_points_used: 0,
@@ -773,6 +869,33 @@ class LoyaltyStore {
   }
 
   public async updateCustomer(id: string, name: string, email?: string, phone?: string): Promise<Customer> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      const updates: any = {
+        name: name.trim(),
+        updated_at: new Date().toISOString(),
+      };
+      if (email !== undefined) updates.email = email?.trim() || null;
+      if (phone !== undefined) updates.phone = phone.replace(/[\s.-]/g, '');
+
+      const { data, error } = await supabase
+        .from('customers')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message || 'Lỗi cập nhật khách hàng trên Database');
+
+      const idx = this.customers.findIndex((c) => c.id === id);
+      if (idx !== -1 && data) this.customers[idx] = data;
+      this.saveToLocalStorage();
+      return data;
+    }
+
     const customer = this.customers.find((c) => c.id === id);
     if (!customer) throw new Error('Không tìm thấy khách hàng');
     customer.name = name;
@@ -784,6 +907,28 @@ class LoyaltyStore {
   }
 
   public async deleteCustomer(id: string): Promise<boolean> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      const { data: lots } = await supabase.from('point_lots').select('id').eq('customer_id', id);
+      if (lots && lots.length > 0) {
+        const lotIds = lots.map((l) => l.id);
+        await supabase.from('point_redemption_allocations').delete().in('point_lot_id', lotIds);
+      }
+      await supabase.from('point_lots').delete().eq('customer_id', id);
+      await supabase.from('point_transactions').delete().eq('customer_id', id);
+      const { error } = await supabase.from('customers').delete().eq('id', id);
+      if (error) throw new Error(error.message || 'Lỗi xóa khách hàng trên Database');
+
+      this.customers = this.customers.filter((c) => c.id !== id);
+      this.lots = this.lots.filter((l) => l.customer_id !== id);
+      this.transactions = this.transactions.filter((t) => t.customer_id !== id);
+      this.saveToLocalStorage();
+      return true;
+    }
+
     const index = this.customers.findIndex((c) => c.id === id);
     if (index === -1) throw new Error('Không tìm thấy khách hàng cần xóa');
 
@@ -838,6 +983,25 @@ class LoyaltyStore {
 
   // POINT LOTS
   public async getCustomerLots(customerId: string): Promise<PointLot[]> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+    if (this.isSupabaseLive) {
+      try {
+        const { data, error } = await supabase
+          .from('point_lots')
+          .select('*')
+          .eq('customer_id', customerId)
+          .order('expires_at', { ascending: true });
+        if (!error && data) {
+          return data.map((lot) => ({
+            ...lot,
+            days_left: getDaysUntilExpiry(lot.expires_at),
+          }));
+        }
+      } catch (_) {}
+    }
+
     return this.lots
       .filter((lot) => lot.customer_id === customerId)
       .map((lot) => ({
@@ -848,6 +1012,32 @@ class LoyaltyStore {
   }
 
   public async getExpiringLots(withinDays: number = 30): Promise<(PointLot & { customer?: Customer })[]> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+    if (this.isSupabaseLive) {
+      try {
+        const now = new Date();
+        const future = new Date();
+        future.setDate(future.getDate() + withinDays);
+        const { data, error } = await supabase
+          .from('point_lots')
+          .select('*, customers(*)')
+          .eq('status', 'ACTIVE')
+          .gt('remaining_points', 0)
+          .gt('expires_at', now.toISOString())
+          .lte('expires_at', future.toISOString())
+          .order('expires_at', { ascending: true });
+        if (!error && data) {
+          return data.map((l: any) => ({
+            ...l,
+            days_left: getDaysUntilExpiry(l.expires_at),
+            customer: l.customers,
+          }));
+        }
+      } catch (_) {}
+    }
+
     const now = new Date();
     const future = new Date();
     future.setDate(future.getDate() + withinDays);
@@ -873,6 +1063,48 @@ class LoyaltyStore {
     query?: string;
     limit?: number;
   }): Promise<PointTransaction[]> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      try {
+        let q = supabase
+          .from('point_transactions')
+          .select('*, customers(name, phone)')
+          .order('created_at', { ascending: false });
+
+        if (params?.customerId) {
+          q = q.eq('customer_id', params.customerId);
+        }
+        if (params?.type && params.type !== 'ALL') {
+          q = q.eq('type', params.type);
+        }
+        if (params?.limit) {
+          q = q.limit(params.limit);
+        }
+        const { data, error } = await q;
+        if (!error && data) {
+          let list = data.map((t: any) => ({
+            ...t,
+            customer_name: t.customers?.name || t.customer_name || 'Khách hàng',
+            customer_phone: t.customers?.phone || t.customer_phone || '',
+          })) as PointTransaction[];
+
+          if (params?.query?.trim()) {
+            const queryStr = params.query.trim().toLowerCase();
+            list = list.filter(
+              (t) =>
+                (t.customer_name && t.customer_name.toLowerCase().includes(queryStr)) ||
+                (t.customer_phone && t.customer_phone.includes(queryStr)) ||
+                (t.description && t.description.toLowerCase().includes(queryStr))
+            );
+          }
+          return list;
+        }
+      } catch (_) {}
+    }
+
     let list = [...this.transactions];
 
     if (params?.customerId) {
@@ -920,6 +1152,74 @@ class LoyaltyStore {
       throw new Error('Số tiền thanh toán phải lớn hơn 0');
     }
 
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    const cleaned = params.phone.replace(/[\s.-]/g, '');
+
+    if (this.isSupabaseLive) {
+      const { data, error } = await supabase.rpc('earn_points_atomic', {
+        p_phone: cleaned,
+        p_name: params.name || '',
+        p_amount: params.amount,
+        p_description: params.description || 'Tích điểm thanh toán tiền sân',
+        p_reference_type: params.referenceType || 'BOOKING',
+        p_reference_id: params.referenceId || null,
+        p_created_by: params.createdBy || (this.currentRole === 'ADMIN' ? 'ADMIN' : 'STAFF'),
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Lỗi tích điểm trên Database');
+      }
+
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', data.customer_id)
+        .single();
+
+      const transaction: PointTransaction = {
+        id: data.transaction_id,
+        customer_id: data.customer_id,
+        customer_name: customer?.name || params.name || 'Khách hàng',
+        customer_phone: customer?.phone || cleaned,
+        type: 'EARN',
+        points: data.points_earned,
+        amount: params.amount,
+        reference_type: params.referenceType || 'BOOKING',
+        reference_id: params.referenceId || null,
+        description: params.description || 'Tích điểm thanh toán tiền sân',
+        created_by: params.createdBy || (this.currentRole === 'ADMIN' ? 'ADMIN' : 'STAFF'),
+        created_at: new Date().toISOString(),
+      };
+
+      const lot: PointLot = {
+        id: data.point_lot_id,
+        customer_id: data.customer_id,
+        transaction_id: data.transaction_id,
+        original_points: data.points_earned,
+        remaining_points: data.points_earned,
+        earned_at: new Date().toISOString(),
+        expires_at: data.expires_at,
+        status: 'ACTIVE',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const cIdx = this.customers.findIndex((c) => c.id === data.customer_id);
+      if (cIdx !== -1 && customer) {
+        this.customers[cIdx] = customer;
+      } else if (customer) {
+        this.customers.unshift(customer);
+      }
+      this.transactions.unshift(transaction);
+      this.lots.unshift(lot);
+      this.saveToLocalStorage();
+
+      return { customer: customer || this.customers[0], transaction, lot, pointsEarned: data.points_earned };
+    }
+
     // 1. Calculate points by current settings
     const pointsEarned = calculatePoints(
       params.amount,
@@ -932,7 +1232,6 @@ class LoyaltyStore {
     const expiresAt = calculateExpiryDate(this.settings.expiry_days).toISOString();
 
     // 3. Find or create customer in internal array
-    const cleaned = params.phone.replace(/[\s.-]/g, '');
     let customerIndex = this.customers.findIndex((c) => c.phone.replace(/[\s.-]/g, '') === cleaned);
     if (customerIndex === -1) {
       await this.createCustomer(params.phone, params.name || 'Khách hàng mới');
@@ -1011,6 +1310,60 @@ class LoyaltyStore {
       throw new Error('Số điểm muốn sử dụng phải lớn hơn 0');
     }
 
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      const { data, error } = await supabase.rpc('redeem_points_fefo_atomic', {
+        p_customer_id: params.customerId,
+        p_points_to_redeem: params.points,
+        p_description: params.description || 'Sử dụng điểm đổi ưu đãi / giảm giá tiền sân',
+        p_created_by: params.createdBy || 'STAFF',
+        p_reference_type: params.referenceType || 'POS_ORDER',
+        p_reference_id: params.referenceId || null,
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Lỗi trừ điểm trên Database');
+      }
+
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', params.customerId)
+        .single();
+
+      const transaction: PointTransaction = {
+        id: data.transaction_id,
+        customer_id: params.customerId,
+        customer_name: customer?.name || 'Khách hàng',
+        customer_phone: customer?.phone || '',
+        type: 'REDEEM',
+        points: -params.points,
+        amount: 0,
+        reference_type: params.referenceType || 'POS_ORDER',
+        reference_id: params.referenceId || null,
+        description: params.description || 'Sử dụng điểm đổi ưu đãi / giảm giá tiền sân',
+        created_by: params.createdBy || 'STAFF',
+        created_at: new Date().toISOString(),
+      };
+
+      const cIdx = this.customers.findIndex((c) => c.id === params.customerId);
+      if (cIdx !== -1 && customer) {
+        this.customers[cIdx] = customer;
+      }
+      this.transactions.unshift(transaction);
+      this.saveToLocalStorage();
+
+      return {
+        customer: customer || this.customers[0],
+        transaction,
+        allocations: data.allocations || [],
+        newBalance: data.new_total_points,
+      };
+    }
+
     const customer = this.customers.find((c) => c.id === params.customerId);
     if (!customer) throw new Error('Không tìm thấy khách hàng');
 
@@ -1052,54 +1405,55 @@ class LoyaltyStore {
       created_at: nowIso,
     };
 
-    // 3. Allocate points across lots in FEFO order
+    // 3. Deduct points from lots according to FEFO
     let pointsNeeded = params.points;
-    const newAllocations: PointRedemptionAllocation[] = [];
+    const allocations: PointRedemptionAllocation[] = [];
 
     for (const lot of validLots) {
-      const deduct = Math.min(lot.remaining_points, pointsNeeded);
-      lot.remaining_points -= deduct;
+      const pointsToDeductFromLot = Math.min(lot.remaining_points, pointsNeeded);
+
+      lot.remaining_points -= pointsToDeductFromLot;
       if (lot.remaining_points === 0) {
         lot.status = 'FULLY_USED';
       }
       lot.updated_at = nowIso;
 
-      const alloc: PointRedemptionAllocation = {
+      const allocation: PointRedemptionAllocation = {
         id: 'alloc-' + Math.random().toString(36).substring(2, 9),
         redemption_transaction_id: txId,
         point_lot_id: lot.id,
-        points_used: deduct,
+        points_used: pointsToDeductFromLot,
         created_at: nowIso,
-        point_lot: { ...lot },
       };
 
-      this.allocations.unshift(alloc);
-      newAllocations.push(alloc);
+      this.allocations.push(allocation);
+      allocations.push(allocation);
 
-      pointsNeeded -= deduct;
+      pointsNeeded -= pointsToDeductFromLot;
+
       if (pointsNeeded === 0) break;
     }
 
-    // 4. Update customer balance
-    customer.total_points -= params.points;
-    customer.lifetime_points_used += params.points;
+    // 4. Update customer balance and last transaction timestamp
     customer.last_transaction_at = nowIso;
     customer.updated_at = nowIso;
 
-    transaction.allocations = newAllocations;
+    // Commit changes
     this.transactions.unshift(transaction);
+
+    // Synchronize all customer balances directly from lots and persist
     this.syncAllCustomerBalances();
     this.saveToLocalStorage();
 
     return {
-      customer,
+      customer: { ...customer },
       transaction,
-      allocations: newAllocations,
+      allocations,
       newBalance: customer.total_points,
     };
   }
 
-  // ATOMIC ADJUSTMENT (ADMIN ONLY)
+  // ADJUST POINTS (ADMIN ONLY)
   public async adjustPoints(params: {
     customerId: string;
     pointsDelta: number;
@@ -1108,6 +1462,52 @@ class LoyaltyStore {
   }): Promise<{ customer: Customer; transaction: PointTransaction; newBalance: number }> {
     if (params.pointsDelta === 0) {
       throw new Error('Số điểm điều chỉnh không được bằng 0');
+    }
+
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      const { data, error } = await supabase.rpc('adjust_points_atomic', {
+        p_customer_id: params.customerId,
+        p_points_delta: params.pointsDelta,
+        p_reason: params.reason,
+        p_created_by: params.createdBy || 'ADMIN',
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Lỗi điều chỉnh điểm trên Database');
+      }
+
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', params.customerId)
+        .single();
+
+      const transaction: PointTransaction = {
+        id: data.transaction_id,
+        customer_id: params.customerId,
+        customer_name: customer?.name || 'Khách hàng',
+        customer_phone: customer?.phone || '',
+        type: 'ADJUST',
+        points: params.pointsDelta,
+        amount: 0,
+        reference_type: 'ADJUSTMENT',
+        description: params.reason,
+        created_by: params.createdBy || 'ADMIN',
+        created_at: new Date().toISOString(),
+      };
+
+      const cIdx = this.customers.findIndex((c) => c.id === params.customerId);
+      if (cIdx !== -1 && customer) {
+        this.customers[cIdx] = customer;
+      }
+      this.transactions.unshift(transaction);
+      this.saveToLocalStorage();
+
+      return { customer: customer || this.customers[0], transaction, newBalance: data.new_total_points };
     }
 
     const customer = this.customers.find((c) => c.id === params.customerId);
@@ -1178,12 +1578,54 @@ class LoyaltyStore {
 
   // SETTINGS
   public async getPointSettings(): Promise<PointSetting> {
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+    if (this.isSupabaseLive) {
+      try {
+        const { data, error } = await supabase
+          .from('point_settings')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) {
+          this.settings = data;
+          return data;
+        }
+      } catch (_) {}
+    }
     return { ...this.settings };
   }
 
   public async updatePointSettings(newSettings: Partial<PointSetting>): Promise<PointSetting> {
     if (this.currentRole !== 'ADMIN') {
       throw new Error('Chỉ tài khoản ADMIN mới có quyền thay đổi cấu hình tích điểm!');
+    }
+
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+
+    if (this.isSupabaseLive) {
+      try {
+        const { data, error } = await supabase
+          .from('point_settings')
+          .update({
+            ...newSettings,
+            updated_at: new Date().toISOString(),
+            updated_by: 'ADMIN',
+          })
+          .eq('is_active', true)
+          .select()
+          .single();
+        if (!error && data) {
+          this.settings = data;
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch (_) {}
     }
 
     this.settings = {
@@ -1195,6 +1637,28 @@ class LoyaltyStore {
 
     this.saveToLocalStorage();
     return { ...this.settings };
+  }
+
+  public async clearAllData(): Promise<void> {
+    this.customers = [];
+    this.lots = [];
+    this.transactions = [];
+    this.allocations = [];
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('hl_loyalty_customers');
+      localStorage.removeItem('hl_loyalty_lots');
+      localStorage.removeItem('hl_loyalty_transactions');
+      localStorage.removeItem('hl_loyalty_allocations');
+    }
+    if (!this.hasCheckedSupabase) {
+      await this.checkSupabaseConnection();
+    }
+    if (this.isSupabaseLive) {
+      await supabase.from('point_redemption_allocations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('point_lots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('point_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('customers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    }
   }
 
   // DASHBOARD STATS & CHARTS
