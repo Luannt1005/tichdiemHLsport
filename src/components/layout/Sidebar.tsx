@@ -8,6 +8,7 @@ import {
   Users,
   History,
   Settings,
+  ScrollText,
   ChevronLeft,
   ChevronRight,
   X,
@@ -36,6 +37,11 @@ const navItems: NavItem[] = [
     title: 'Tổng quan',
     href: '/',
     icon: LayoutDashboard,
+  },
+  {
+    title: 'Nhật ký hoạt động',
+    href: '/logs',
+    icon: ScrollText,
   },
   {
     title: 'Cài đặt tích điểm',

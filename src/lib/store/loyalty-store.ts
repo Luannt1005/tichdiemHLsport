@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
+import { activityLogService } from '@/lib/services/activity-log-service';
 import {
   Customer,
   PointSetting,
@@ -841,6 +842,13 @@ class LoyaltyStore {
 
       this.customers.unshift(data);
       this.saveToLocalStorage();
+      activityLogService.logActivity(
+        'CUSTOMER_CREATE',
+        'CUSTOMER',
+        data.id,
+        `Tạo khách hàng mới: ${data.name} (SĐT: ${data.phone})`,
+        { name: data.name, phone: data.phone, email: data.email }
+      );
       return data;
     }
 
@@ -865,6 +873,13 @@ class LoyaltyStore {
 
     this.customers.unshift(newCustomer);
     this.saveToLocalStorage();
+    activityLogService.logActivity(
+      'CUSTOMER_CREATE',
+      'CUSTOMER',
+      newCustomer.id,
+      `Tạo khách hàng mới: ${newCustomer.name} (SĐT: ${newCustomer.phone})`,
+      { name: newCustomer.name, phone: newCustomer.phone, email: newCustomer.email }
+    );
     return newCustomer;
   }
 
@@ -893,6 +908,13 @@ class LoyaltyStore {
       const idx = this.customers.findIndex((c) => c.id === id);
       if (idx !== -1 && data) this.customers[idx] = data;
       this.saveToLocalStorage();
+      activityLogService.logActivity(
+        'CUSTOMER_UPDATE',
+        'CUSTOMER',
+        data.id,
+        `Cập nhật thông tin khách hàng: ${data.name} (SĐT: ${data.phone})`,
+        { name: data.name, phone: data.phone, email: data.email }
+      );
       return data;
     }
 
@@ -903,6 +925,13 @@ class LoyaltyStore {
     if (phone !== undefined) customer.phone = phone;
     customer.updated_at = new Date().toISOString();
     this.saveToLocalStorage();
+    activityLogService.logActivity(
+      'CUSTOMER_UPDATE',
+      'CUSTOMER',
+      customer.id,
+      `Cập nhật thông tin khách hàng: ${customer.name} (SĐT: ${customer.phone})`,
+      { name: customer.name, phone: customer.phone, email: customer.email }
+    );
     return customer;
   }
 
@@ -926,12 +955,20 @@ class LoyaltyStore {
       this.lots = this.lots.filter((l) => l.customer_id !== id);
       this.transactions = this.transactions.filter((t) => t.customer_id !== id);
       this.saveToLocalStorage();
+      activityLogService.logActivity(
+        'CUSTOMER_DELETE',
+        'CUSTOMER',
+        id,
+        `Xóa khách hàng ID: ${id} khỏi hệ thống`,
+        { id }
+      );
       return true;
     }
 
     const index = this.customers.findIndex((c) => c.id === id);
     if (index === -1) throw new Error('Không tìm thấy khách hàng cần xóa');
 
+    const deletedCustomer = this.customers[index];
     // Remove customer from store
     this.customers.splice(index, 1);
     // Remove related point lots and transactions
@@ -939,6 +976,13 @@ class LoyaltyStore {
     this.transactions = this.transactions.filter((t) => t.customer_id !== id);
 
     this.saveToLocalStorage();
+    activityLogService.logActivity(
+      'CUSTOMER_DELETE',
+      'CUSTOMER',
+      id,
+      `Xóa khách hàng: ${deletedCustomer.name} (SĐT: ${deletedCustomer.phone}) khỏi hệ thống`,
+      { id, name: deletedCustomer.name, phone: deletedCustomer.phone }
+    );
     return true;
   }
 
@@ -1217,6 +1261,14 @@ class LoyaltyStore {
       this.lots.unshift(lot);
       this.saveToLocalStorage();
 
+      activityLogService.logActivity(
+        'POINTS_EARN',
+        'POINT_TRANSACTION',
+        transaction.id,
+        `Tích +${data.points_earned.toLocaleString('vi-VN')} điểm cho khách hàng ${customer?.name || params.name || cleaned} từ hóa đơn ${params.amount.toLocaleString('vi-VN')}đ`,
+        { phone: cleaned, name: customer?.name || params.name, points: data.points_earned, amount: params.amount, transactionId: transaction.id }
+      );
+
       return { customer: customer || this.customers[0], transaction, lot, pointsEarned: data.points_earned };
     }
 
@@ -1289,6 +1341,14 @@ class LoyaltyStore {
     this.syncAllCustomerBalances();
     this.saveToLocalStorage();
 
+    activityLogService.logActivity(
+      'POINTS_EARN',
+      'POINT_TRANSACTION',
+      transaction.id,
+      `Tích +${pointsEarned.toLocaleString('vi-VN')} điểm cho khách hàng ${customer.name} (SĐT: ${customer.phone}) từ hóa đơn ${params.amount.toLocaleString('vi-VN')}đ`,
+      { phone: customer.phone, name: customer.name, points: pointsEarned, amount: params.amount, transactionId: transaction.id }
+    );
+
     return { customer: { ...customer }, transaction, lot, pointsEarned };
   }
 
@@ -1355,6 +1415,14 @@ class LoyaltyStore {
       }
       this.transactions.unshift(transaction);
       this.saveToLocalStorage();
+
+      activityLogService.logActivity(
+        'POINTS_REDEEM',
+        'POINT_TRANSACTION',
+        transaction.id,
+        `Khách hàng ${customer?.name || 'Khách hàng'} (SĐT: ${customer?.phone || ''}) đã sử dụng -${params.points.toLocaleString('vi-VN')} điểm`,
+        { phone: customer?.phone, name: customer?.name, points: params.points, transactionId: transaction.id, newBalance: data.new_total_points }
+      );
 
       return {
         customer: customer || this.customers[0],
@@ -1445,6 +1513,14 @@ class LoyaltyStore {
     this.syncAllCustomerBalances();
     this.saveToLocalStorage();
 
+    activityLogService.logActivity(
+      'POINTS_REDEEM',
+      'POINT_TRANSACTION',
+      transaction.id,
+      `Khách hàng ${customer.name} (SĐT: ${customer.phone}) đã sử dụng -${params.points.toLocaleString('vi-VN')} điểm`,
+      { phone: customer.phone, name: customer.name, points: params.points, transactionId: transaction.id, newBalance: customer.total_points }
+    );
+
     return {
       customer: { ...customer },
       transaction,
@@ -1506,6 +1582,14 @@ class LoyaltyStore {
       }
       this.transactions.unshift(transaction);
       this.saveToLocalStorage();
+
+      activityLogService.logActivity(
+        'POINTS_ADJUST',
+        'POINT_TRANSACTION',
+        transaction.id,
+        `Điều chỉnh ${params.pointsDelta > 0 ? '+' : ''}${params.pointsDelta.toLocaleString('vi-VN')} điểm cho khách hàng ${customer?.name || 'Khách hàng'}. Lý do: ${params.reason}`,
+        { phone: customer?.phone, name: customer?.name, pointsDelta: params.pointsDelta, reason: params.reason, newBalance: data.new_total_points }
+      );
 
       return { customer: customer || this.customers[0], transaction, newBalance: data.new_total_points };
     }
@@ -1573,6 +1657,14 @@ class LoyaltyStore {
     this.syncAllCustomerBalances();
     this.saveToLocalStorage();
 
+    activityLogService.logActivity(
+      'POINTS_ADJUST',
+      'POINT_TRANSACTION',
+      transaction.id,
+      `Điều chỉnh ${params.pointsDelta > 0 ? '+' : ''}${params.pointsDelta.toLocaleString('vi-VN')} điểm cho khách hàng ${customer.name}. Lý do: ${params.reason}`,
+      { phone: customer.phone, name: customer.name, pointsDelta: params.pointsDelta, reason: params.reason, newBalance: customer.total_points }
+    );
+
     return { customer, transaction, newBalance: customer.total_points };
   }
 
@@ -1623,6 +1715,13 @@ class LoyaltyStore {
         if (!error && data) {
           this.settings = data;
           this.saveToLocalStorage();
+          activityLogService.logActivity(
+            'SETTINGS_UPDATE',
+            'POINT_SETTING',
+            data.id,
+            `Cập nhật cấu hình tích điểm: ${data.amount_per_point.toLocaleString('vi-VN')}đ = ${data.points_per_amount} điểm, hạn ${data.expiry_days} ngày`,
+            newSettings
+          );
           return data;
         }
       } catch (_) {}
@@ -1636,6 +1735,13 @@ class LoyaltyStore {
     };
 
     this.saveToLocalStorage();
+    activityLogService.logActivity(
+      'SETTINGS_UPDATE',
+      'POINT_SETTING',
+      this.settings.id,
+      `Cập nhật cấu hình tích điểm: ${this.settings.amount_per_point.toLocaleString('vi-VN')}đ = ${this.settings.points_per_amount} điểm, hạn ${this.settings.expiry_days} ngày`,
+      newSettings
+    );
     return { ...this.settings };
   }
 

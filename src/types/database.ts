@@ -4,6 +4,42 @@ export type RoundingMode = 'FLOOR' | 'ROUND' | 'CEIL';
 export type CustomerStatus = 'ACTIVE' | 'INACTIVE';
 export type UserRole = 'ADMIN' | 'STAFF';
 
+export type ActivityAction = 
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'CUSTOMER_CREATE'
+  | 'CUSTOMER_UPDATE'
+  | 'CUSTOMER_DELETE'
+  | 'POINTS_EARN'
+  | 'POINTS_REDEEM'
+  | 'POINTS_ADJUST'
+  | 'SETTINGS_UPDATE'
+  | 'EXPIRE_CHECK';
+
+export interface AppUser {
+  id: string;
+  username: string;
+  email?: string | null;
+  name: string;
+  role: UserRole;
+  is_active: boolean;
+  last_login_at?: string | null;
+  created_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  user_id?: string | null;
+  username: string;
+  user_role: UserRole;
+  action: ActivityAction;
+  entity_type: 'AUTH' | 'CUSTOMER' | 'POINT_TRANSACTION' | 'POINT_SETTING';
+  entity_id?: string | null;
+  description: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
 export interface Customer {
   id: string;
   phone: string;
