@@ -7,7 +7,7 @@ import { Header } from './Header';
 import { ToastProvider } from '@/components/ui/Toast';
 import { authStore } from '@/lib/auth/auth-store';
 
-const PUBLIC_PATHS = ['/login', '/lookup', '/tra-cuu'];
+const PUBLIC_PATHS = ['/login', '/register', '/dang-ky', '/lookup', '/tra-cuu'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
