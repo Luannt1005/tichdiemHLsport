@@ -263,6 +263,136 @@ class AuthStore {
 
     return { success: true };
   }
+
+  public async register(params: {
+    username: string;
+    name: string;
+    email?: string;
+    password: string;
+    role?: UserRole;
+  }): Promise<{ success: boolean; user?: AppUser; error?: string }> {
+    const rawUsername = params.username.trim().toLowerCase();
+    const rawName = params.name.trim();
+    const rawEmail = params.email?.trim().toLowerCase() || null;
+    const rawPassword = params.password.trim();
+    const role: UserRole = params.role || 'STAFF';
+
+    if (!rawUsername || rawUsername.length < 3) {
+      return { success: false, error: 'Tên đăng nhập phải có ít nhất 3 ký tự' };
+    }
+
+    if (!/^[a-z0-9_]+$/.test(rawUsername)) {
+      return {
+        success: false,
+        error: 'Tên đăng nhập chỉ được chứa chữ cái không dấu, chữ số và dấu gạch dưới (_)',
+      };
+    }
+
+    if (!rawName || rawName.length < 2) {
+      return { success: false, error: 'Họ và tên phải có ít nhất 2 ký tự' };
+    }
+
+    if (!rawPassword || rawPassword.length < 6) {
+      return { success: false, error: 'Mật khẩu phải có tối thiểu 6 ký tự' };
+    }
+
+    // 1. Kiểm tra trên Supabase
+    try {
+      let query = supabase
+        .from('app_users')
+        .select('id, username, email')
+        .or(`username.eq.${rawUsername}${rawEmail ? `,email.eq.${rawEmail}` : ''}`);
+
+      const { data: existingUsers, error: checkErr } = await query;
+      if (!checkErr && existingUsers && existingUsers.length > 0) {
+        const found = existingUsers[0];
+        if (found.username.toLowerCase() === rawUsername) {
+          return { success: false, error: `Tên đăng nhập '${rawUsername}' đã được sử dụng` };
+        }
+        if (rawEmail && found.email?.toLowerCase() === rawEmail) {
+          return { success: false, error: `Email '${rawEmail}' đã được sử dụng` };
+        }
+      }
+
+      // Thử insert vào Supabase
+      const { data: created, error: insertErr } = await supabase
+        .from('app_users')
+        .insert({
+          username: rawUsername,
+          name: rawName,
+          email: rawEmail,
+          password_hash: rawPassword,
+          role,
+          is_active: true,
+          last_login_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (!insertErr && created) {
+        const userObj: AppUser = {
+          id: created.id,
+          username: created.username,
+          name: created.name,
+          email: created.email,
+          role: created.role as UserRole,
+          is_active: created.is_active,
+          last_login_at: created.last_login_at,
+          created_at: created.created_at,
+        };
+
+        this.users.push({ ...userObj, password_hash: rawPassword });
+        this.saveUsersToLocalStorage();
+        this.saveSession(userObj);
+        return { success: true, user: userObj };
+      }
+    } catch (_) {
+      // Fallback local
+    }
+
+    // 2. Kiểm tra trên local users
+    const existsLocal = this.users.find(
+      (u) =>
+        u.username.toLowerCase() === rawUsername ||
+        (rawEmail && u.email?.toLowerCase() === rawEmail)
+    );
+
+    if (existsLocal) {
+      if (existsLocal.username.toLowerCase() === rawUsername) {
+        return { success: false, error: `Tên đăng nhập '${rawUsername}' đã được sử dụng` };
+      }
+      return { success: false, error: `Email '${rawEmail}' đã được sử dụng` };
+    }
+
+    const newUser: AppUser & { password_hash: string } = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      username: rawUsername,
+      name: rawName,
+      email: rawEmail,
+      password_hash: rawPassword,
+      role,
+      is_active: true,
+      last_login_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    this.users.push(newUser);
+    this.saveUsersToLocalStorage();
+
+    const userObj: AppUser = {
+      id: newUser.id,
+      username: newUser.username,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      is_active: newUser.is_active,
+      last_login_at: newUser.last_login_at,
+      created_at: newUser.created_at,
+    };
+
+    this.saveSession(userObj);
+    return { success: true, user: userObj };
+  }
 }
 
 export const authStore = new AuthStore();

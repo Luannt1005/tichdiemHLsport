@@ -7,6 +7,7 @@ export type UserRole = 'ADMIN' | 'STAFF';
 export type ActivityAction = 
   | 'LOGIN'
   | 'LOGOUT'
+  | 'USER_REGISTER'
   | 'CUSTOMER_CREATE'
   | 'CUSTOMER_UPDATE'
   | 'CUSTOMER_DELETE'

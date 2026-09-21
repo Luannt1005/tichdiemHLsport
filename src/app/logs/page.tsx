@@ -37,6 +37,12 @@ const ACTION_MAP: Record<
     text: 'text-slate-600',
     border: 'border-slate-200',
   },
+  USER_REGISTER: {
+    label: 'Tạo tài khoản',
+    bg: 'bg-teal-50',
+    text: 'text-teal-700',
+    border: 'border-teal-200',
+  },
   CUSTOMER_CREATE: {
     label: 'Tạo khách hàng',
     bg: 'bg-sky-50',
@@ -224,6 +230,7 @@ export default function LogsPage() {
             <option value="ALL">Tất cả hành động</option>
             <option value="LOGIN">Đăng nhập (LOGIN)</option>
             <option value="LOGOUT">Đăng xuất (LOGOUT)</option>
+            <option value="USER_REGISTER">Đăng ký tài khoản (REGISTER)</option>
             <option value="CUSTOMER_CREATE">Tạo khách hàng</option>
             <option value="CUSTOMER_UPDATE">Cập nhật khách hàng</option>
             <option value="CUSTOMER_DELETE">Xóa khách hàng</option>
