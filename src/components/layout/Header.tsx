@@ -25,6 +25,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/customers': { title: 'Quản lý Khách hàng', subtitle: 'Danh sách và hồ sơ điểm của khách chơi sân' },
   '/history': { title: 'Lịch sử Biến Động Điểm', subtitle: 'Audit log minh bạch toàn bộ giao dịch điểm' },
   '/logs': { title: 'Nhật Ký Hoạt Động', subtitle: 'Ghi nhận lịch sử thao tác của các tài khoản trên hệ thống' },
+  '/admin': { title: 'Quản Trị Hệ Thống', subtitle: 'Quản lý tài khoản và phân quyền người dùng' },
   '/settings': { title: 'Cài đặt Tích Điểm', subtitle: 'Cấu hình tỷ lệ quy đổi, làm tròn và số ngày hết hạn' },
 };
 
@@ -174,6 +175,17 @@ export function Header({
                     <UserCircle className="w-4 h-4 text-slate-500" />
                     <span>Hồ sơ tài khoản</span>
                   </button>
+
+                  {role === 'ADMIN' && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setShowUserDropdown(false)}
+                      className="w-full text-left px-4 py-2.5 flex items-center gap-2.5 text-emerald-700 hover:bg-emerald-50 font-semibold"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Quản trị hệ thống</span>
+                    </Link>
+                  )}
 
                   <Link
                     href="/logs"

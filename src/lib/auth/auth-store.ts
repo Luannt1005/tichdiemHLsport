@@ -393,6 +393,194 @@ class AuthStore {
     this.saveSession(userObj);
     return { success: true, user: userObj };
   }
+
+  public async getUsers(): Promise<AppUser[]> {
+    // 1. Thử lấy từ Supabase
+    try {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        // Sync to local memory
+        const list: AppUser[] = data.map((u) => ({
+          id: u.id,
+          username: u.username,
+          name: u.name,
+          email: u.email,
+          role: u.role as UserRole,
+          is_active: u.is_active,
+          last_login_at: u.last_login_at,
+          created_at: u.created_at,
+        }));
+
+        // Merge password_hash if exists locally
+        for (const u of data) {
+          const localIdx = this.users.findIndex((lu) => lu.id === u.id || lu.username === u.username);
+          if (localIdx !== -1) {
+            this.users[localIdx] = {
+              ...u,
+              role: u.role as UserRole,
+              password_hash: u.password_hash || this.users[localIdx].password_hash,
+            };
+          } else {
+            this.users.push({
+              ...u,
+              role: u.role as UserRole,
+              password_hash: u.password_hash || 'admin123',
+            });
+          }
+        }
+        this.saveUsersToLocalStorage();
+        return list;
+      }
+    } catch (_) {}
+
+    // 2. Fallback local users
+    return this.users.map(({ password_hash, ...u }) => u);
+  }
+
+  public async updateUserRole(
+    userId: string,
+    newRole: UserRole
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.currentUser?.role !== 'ADMIN') {
+      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền thay đổi phân quyền' };
+    }
+
+    const targetUser = this.users.find((u) => u.id === userId);
+    if (!targetUser) {
+      return { success: false, error: 'Không tìm thấy tài khoản người dùng' };
+    }
+
+    // Không cho phép tự hạ quyền admin nếu là admin duy nhất
+    if (userId === this.currentUser?.id && newRole !== 'ADMIN') {
+      const adminCount = this.users.filter((u) => u.role === 'ADMIN' && u.is_active).length;
+      if (adminCount <= 1) {
+        return {
+          success: false,
+          error: 'Không thể hạ quyền của Quản trị viên duy nhất đang hoạt động trong hệ thống',
+        };
+      }
+    }
+
+    // Update Supabase
+    try {
+      await supabase
+        .from('app_users')
+        .update({ role: newRole, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+    } catch (_) {}
+
+    // Update Local
+    targetUser.role = newRole;
+    if (this.currentUser && this.currentUser.id === userId) {
+      this.currentUser.role = newRole;
+      this.saveSession(this.currentUser);
+    }
+    this.saveUsersToLocalStorage();
+
+    return { success: true };
+  }
+
+  public async toggleUserStatus(
+    userId: string,
+    isActive: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.currentUser?.role !== 'ADMIN') {
+      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền khóa/mở khóa tài khoản' };
+    }
+
+    if (userId === this.currentUser?.id && !isActive) {
+      return { success: false, error: 'Bạn không thể tự khóa tài khoản của chính mình!' };
+    }
+
+    const targetUser = this.users.find((u) => u.id === userId);
+    if (!targetUser) {
+      return { success: false, error: 'Không tìm thấy tài khoản người dùng' };
+    }
+
+    // Update Supabase
+    try {
+      await supabase
+        .from('app_users')
+        .update({ is_active: isActive, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+    } catch (_) {}
+
+    // Update Local
+    targetUser.is_active = isActive;
+    this.saveUsersToLocalStorage();
+
+    return { success: true };
+  }
+
+  public async resetUserPassword(
+    userId: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.currentUser?.role !== 'ADMIN') {
+      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền đặt lại mật khẩu người dùng' };
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' };
+    }
+
+    const targetUser = this.users.find((u) => u.id === userId);
+    if (!targetUser) {
+      return { success: false, error: 'Không tìm thấy tài khoản người dùng' };
+    }
+
+    // Update Supabase
+    try {
+      await supabase
+        .from('app_users')
+        .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+    } catch (_) {}
+
+    // Update Local
+    targetUser.password_hash = newPassword;
+    this.saveUsersToLocalStorage();
+
+    return { success: true };
+  }
+
+  public async deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
+    if (this.currentUser?.role !== 'ADMIN') {
+      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền xóa tài khoản' };
+    }
+
+    if (userId === this.currentUser?.id) {
+      return { success: false, error: 'Bạn không thể tự xóa tài khoản của chính mình!' };
+    }
+
+    const targetIndex = this.users.findIndex((u) => u.id === userId);
+    if (targetIndex === -1) {
+      return { success: false, error: 'Không tìm thấy tài khoản cần xóa' };
+    }
+
+    const targetUser = this.users[targetIndex];
+    if (targetUser.role === 'ADMIN') {
+      const adminCount = this.users.filter((u) => u.role === 'ADMIN').length;
+      if (adminCount <= 1) {
+        return { success: false, error: 'Không thể xóa Quản trị viên duy nhất trong hệ thống!' };
+      }
+    }
+
+    // Delete Supabase
+    try {
+      await supabase.from('app_users').delete().eq('id', userId);
+    } catch (_) {}
+
+    // Delete Local
+    this.users.splice(targetIndex, 1);
+    this.saveUsersToLocalStorage();
+
+    return { success: true };
+  }
 }
 
 export const authStore = new AuthStore();

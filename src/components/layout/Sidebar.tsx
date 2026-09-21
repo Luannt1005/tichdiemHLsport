@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -9,10 +9,13 @@ import {
   History,
   Settings,
   ScrollText,
+  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   X,
 } from 'lucide-react';
+import { authStore } from '@/lib/auth/auth-store';
+import { AppUser } from '@/types/database';
 
 interface NavItem {
   title: string;
@@ -20,6 +23,7 @@ interface NavItem {
   icon: React.ElementType;
   badge?: string;
   badgeColor?: string;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -47,6 +51,13 @@ const navItems: NavItem[] = [
     title: 'Cài đặt tích điểm',
     href: '/settings',
     icon: Settings,
+    adminOnly: true,
+  },
+  {
+    title: 'Quản trị hệ thống',
+    href: '/admin',
+    icon: ShieldCheck,
+    adminOnly: true,
   },
 ];
 
@@ -88,6 +99,17 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+
+  useEffect(() => {
+    setCurrentUser(authStore.getCurrentUser());
+    const unsub = authStore.subscribe((u) => setCurrentUser(u));
+    return () => unsub();
+  }, []);
+
+  const visibleNavItems = navItems.filter(
+    (item) => !item.adminOnly || currentUser?.role === 'ADMIN'
+  );
 
   return (
     <>
@@ -134,7 +156,7 @@ export function Sidebar({
 
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
 

@@ -43,6 +43,30 @@ const ACTION_MAP: Record<
     text: 'text-teal-700',
     border: 'border-teal-200',
   },
+  USER_UPDATE_ROLE: {
+    label: 'Đổi quyền hạn',
+    bg: 'bg-cyan-50',
+    text: 'text-cyan-700',
+    border: 'border-cyan-200',
+  },
+  USER_STATUS_CHANGE: {
+    label: 'Khóa / Mở khóa',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    border: 'border-amber-200',
+  },
+  USER_RESET_PASSWORD: {
+    label: 'Đặt lại mật khẩu',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-200',
+  },
+  USER_DELETE: {
+    label: 'Xóa tài khoản',
+    bg: 'bg-rose-50',
+    text: 'text-rose-700',
+    border: 'border-rose-200',
+  },
   CUSTOMER_CREATE: {
     label: 'Tạo khách hàng',
     bg: 'bg-sky-50',
@@ -231,6 +255,10 @@ export default function LogsPage() {
             <option value="LOGIN">Đăng nhập (LOGIN)</option>
             <option value="LOGOUT">Đăng xuất (LOGOUT)</option>
             <option value="USER_REGISTER">Đăng ký tài khoản (REGISTER)</option>
+            <option value="USER_UPDATE_ROLE">Đổi quyền hạn (ROLE)</option>
+            <option value="USER_STATUS_CHANGE">Khóa / Mở tài khoản</option>
+            <option value="USER_RESET_PASSWORD">Đặt lại mật khẩu</option>
+            <option value="USER_DELETE">Xóa tài khoản</option>
             <option value="CUSTOMER_CREATE">Tạo khách hàng</option>
             <option value="CUSTOMER_UPDATE">Cập nhật khách hàng</option>
             <option value="CUSTOMER_DELETE">Xóa khách hàng</option>
