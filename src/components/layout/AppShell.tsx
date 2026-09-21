@@ -7,6 +7,8 @@ import { Header } from './Header';
 import { ToastProvider } from '@/components/ui/Toast';
 import { authStore } from '@/lib/auth/auth-store';
 
+const PUBLIC_PATHS = ['/login', '/lookup', '/tra-cuu'];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -14,13 +16,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const isPublicPath = PUBLIC_PATHS.includes(pathname);
+
   useEffect(() => {
     const checkAuth = () => {
       const auth = authStore.isAuthenticated();
       setIsAuthenticated(auth);
       setIsAuthChecked(true);
 
-      if (!auth && pathname !== '/login') {
+      if (!auth && !isPublicPath) {
         router.replace('/login');
       }
     };
@@ -31,10 +35,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [pathname, router]);
+  }, [pathname, router, isPublicPath]);
 
-  // If on login page, render clean page without sidebar/header
-  if (pathname === '/login') {
+  // If on public pages (login, lookup, tra-cuu), render clean page without sidebar/header
+  if (isPublicPath) {
     return <ToastProvider>{children}</ToastProvider>;
   }
 

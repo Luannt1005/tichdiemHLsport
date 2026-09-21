@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Lock,
@@ -281,8 +282,22 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* Customer Lookup Link */}
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+          <Link
+            href="/lookup"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1B6C39] hover:text-[#134F29] transition-colors"
+          >
+            <span>Bạn là khách chơi sân?</span>
+            <span className="underline decoration-emerald-400 decoration-2 underline-offset-2">
+              Tra cứu điểm hội viên tại đây
+            </span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
         {/* Footer info */}
-        <div className="mt-6 text-center text-xs text-slate-400 font-medium">
+        <div className="mt-4 text-center text-xs text-slate-400 font-medium">
           Hệ thống Quản lý Sân Cầu Lông HL Sport • v1.0
         </div>
       </div>
