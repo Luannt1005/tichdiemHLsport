@@ -1,29 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   Search,
   Phone,
-  Sparkles,
   Calendar,
   Clock,
-  Award,
-  ArrowRight,
-  AlertTriangle,
-  ChevronRight,
   TrendingUp,
-  CreditCard,
   Gift,
-  ShieldCheck,
-  RotateCcw,
   CheckCircle2,
   HelpCircle,
   LogIn,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Customer, PointLot, PointTransaction } from '@/types/database';
 
-// Custom Badminton Shuttlecock Icon
+// Badminton Shuttlecock Icon
 function ShuttlecockIcon({ className = 'w-6 h-6' }: { className?: string }) {
   return (
     <svg
@@ -64,9 +58,8 @@ export default function CustomerLookupPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [data, setData] = useState<LookupData | null>(null);
-  const [activeTab, setActiveTab] = useState<'LOTS' | 'HISTORY' | 'POLICY'>('LOTS');
+  const [activeTab, setActiveTab] = useState<'HISTORY' | 'LOTS' | 'POLICY'>('HISTORY');
 
-  // Format phone as user types
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^\d]/g, '');
     setPhoneInput(val);
@@ -76,12 +69,12 @@ export default function CustomerLookupPage() {
   const handleSearch = async (overridePhone?: string) => {
     const targetPhone = (overridePhone || phoneInput).trim();
     if (!targetPhone) {
-      setErrorMsg('Vui lòng nhập số điện thoại của bạn');
+      setErrorMsg('Vui lòng nhập số điện thoại');
       return;
     }
 
     if (targetPhone.length < 9 || targetPhone.length > 11) {
-      setErrorMsg('Số điện thoại không hợp lệ (từ 9 đến 11 số)');
+      setErrorMsg('Số điện thoại không đúng định dạng');
       return;
     }
 
@@ -97,12 +90,12 @@ export default function CustomerLookupPage() {
         setData(null);
         setErrorMsg(
           json.message ||
-            'Không tìm thấy thông tin khách hàng với số điện thoại này. Bạn có thể liên hệ thu ngân sân để đăng ký thành viên!'
+            'Không tìm thấy số điện thoại này trên hệ thống. Vui lòng liên hệ thu ngân tại sân để kiểm tra!'
         );
       }
     } catch (err: any) {
       setData(null);
-      setErrorMsg('Không thể kết nối máy chủ để tra cứu. Vui lòng thử lại sau.');
+      setErrorMsg('Không thể kết nối máy chủ. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
     }
@@ -140,64 +133,51 @@ export default function CustomerLookupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {/* Top Background Gradient & Court Lines */}
-      <div
-        className="fixed inset-0 pointer-events-none opacity-20 z-0"
-        style={{
-          background: 'radial-gradient(circle at 50% 10%, #207D43 0%, #134F29 50%, #06180c 100%)',
-        }}
-      />
-
-      {/* Navigation Header */}
-      <header className="relative z-10 border-b border-white/10 bg-slate-900/80 backdrop-blur-md sticky top-0">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/lookup" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#207D43] to-[#134F29] text-white flex items-center justify-center shadow-lg shadow-emerald-950/50">
-              <ShuttlecockIcon className="w-6 h-6" />
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <Link href="/lookup" className="flex items-center gap-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#1B6C39] text-white flex items-center justify-center shadow-sm">
+              <ShuttlecockIcon className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-black text-base sm:text-lg text-white tracking-tight">
+              <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight block leading-tight">
                 HL Badminton Sport
               </span>
-              <p className="text-[11px] text-emerald-400 font-semibold leading-tight">
-                Cổng Tra Cứu Điểm Hội Viên
+              <p className="text-xs text-[#1B6C39] font-medium">
+                Tra cứu điểm tích lũy
               </p>
             </div>
           </Link>
 
           <Link
             href="/login"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-bold transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-xs font-semibold transition-all shadow-2xs"
           >
-            <LogIn className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Nhân viên sân</span>
+            <LogIn className="w-3.5 h-3.5 text-slate-500" />
+            <span>Thu ngân</span>
           </Link>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
-        {/* Hero Section */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Tra cứu trực tuyến không cần đăng nhập</span>
+      {/* Main Content */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {/* Search Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-3">
+          <div className="text-center sm:text-left">
+            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900">
+              Kiểm tra điểm thưởng
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Nhập số điện thoại của bạn để xem điểm và hạn dùng
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
-            Kiểm Tra Điểm & Hạn Dùng
-          </h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            Nhập số điện thoại đăng ký khi đặt sân để xem số điểm tích lũy, các gói điểm sắp hết hạn và lịch sử giao dịch.
-          </p>
-        </div>
 
-        {/* Search Box Card */}
-        <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
-          <div className="flex flex-col sm:flex-row gap-2.5">
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
             <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                <Phone className="w-5 h-5 text-emerald-400" />
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Phone className="w-5 h-5 text-emerald-600" />
               </div>
               <input
                 type="tel"
@@ -205,262 +185,168 @@ export default function CustomerLookupPage() {
                 onChange={handlePhoneChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Nhập số điện thoại (ví dụ: 0901234567)"
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-800/80 border border-white/15 rounded-2xl text-white font-bold text-base sm:text-lg tracking-wide placeholder:text-slate-500 placeholder:text-sm placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-[#207D43] focus:border-transparent transition-all"
+                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold text-base placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white transition-all"
               />
             </div>
             <button
               onClick={() => handleSearch()}
               disabled={loading}
-              className="px-6 py-3.5 bg-gradient-to-r from-[#207D43] to-[#134F29] hover:from-[#1b6b3a] hover:to-[#0f3e20] text-white font-bold rounded-2xl shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50"
+              className="px-6 py-3 bg-[#1B6C39] hover:bg-[#14532b] text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 shadow-xs cursor-pointer"
             >
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <Search className="w-5 h-5" />
-                  <span>Tra cứu điểm</span>
+                  <Search className="w-4 h-4" />
+                  <span>Tra cứu</span>
                 </>
               )}
             </button>
           </div>
 
-          {/* Quick Suggestions / Sample Numbers */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-xs text-slate-400 font-semibold">Gợi ý thử nhanh:</span>
-            {['0901234567', '0912345678', '0945678901'].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => {
-                  setPhoneInput(num);
-                  handleSearch(num);
-                }}
-                className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-mono text-emerald-300 transition-all"
-              >
-                {num}
-              </button>
-            ))}
-          </div>
-
           {/* Error Message */}
           {errorMsg && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3 text-rose-300 text-sm">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-rose-400" />
-              <div className="space-y-1">
-                <p className="font-bold">{errorMsg}</p>
-                <p className="text-xs text-rose-300/80">
-                  Nếu bạn vừa chơi sân lần đầu, hãy yêu cầu thu ngân tích điểm vào số điện thoại của bạn sau trận đấu nhé!
-                </p>
-              </div>
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-700 text-xs sm:text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+              <p className="font-medium">{errorMsg}</p>
             </div>
           )}
         </div>
 
         {/* Results Section */}
         {data && (
-          <div className="space-y-6 animate-fade-in">
-            {/* Digital Membership Card */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#207D43] via-[#1B6C39] to-[#0d3f1e] p-6 sm:p-8 text-white shadow-2xl border border-emerald-500/30">
-              {/* Card decorative court lines */}
-              <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-10 pointer-events-none">
-                <div className="w-full h-full border-2 border-white rounded-l-3xl" />
-              </div>
-
-              <div className="relative z-10 flex flex-col justify-between min-h-[180px]">
-                {/* Card Top */}
+          <div className="space-y-4">
+            {/* Membership Card */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1B6C39] to-[#124b27] p-5 sm:p-6 text-white shadow-md">
+              <div className="relative z-10 flex flex-col justify-between space-y-5">
+                {/* Card Header: Name & Status */}
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner">
-                      <ShuttlecockIcon className="w-7 h-7" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200">
-                        HỘI VIÊN CHÍNH THỨC
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-200 block">
+                      Khách hàng thân thiết
+                    </span>
+                    <h2 className="text-xl sm:text-2xl font-black text-white mt-0.5">
+                      {data.customer.name}
+                    </h2>
+                    <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                      SĐT: {data.customer.phone}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/15 text-xs font-semibold text-white">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Đang hoạt động</span>
+                  </div>
+                </div>
+
+                {/* Card Middle: Available Points */}
+                <div className="bg-white/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 backdrop-blur-xs">
+                  <div>
+                    <span className="text-xs font-semibold text-emerald-100 block">
+                      Số điểm hiện có
+                    </span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                        {data.customer.total_points.toLocaleString('vi-VN')}
                       </span>
-                      <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                        {data.customer.name}
-                      </h2>
+                      <span className="text-sm font-semibold text-emerald-200">
+                        điểm
+                      </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 backdrop-blur-md border border-white/20 text-xs font-bold text-emerald-200">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Hoạt động</span>
-                  </div>
-                </div>
-
-                {/* Card Middle: Points display */}
-                <div className="my-6">
-                  <div className="text-xs font-bold text-emerald-200 uppercase tracking-wider">
-                    Điểm khả dụng hiện tại
-                  </div>
-                  <div className="flex items-baseline gap-3 mt-1">
-                    <span className="text-4xl sm:text-5xl font-black text-white tracking-tight drop-shadow-sm">
-                      {data.customer.total_points.toLocaleString('vi-VN')}
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-emerald-200">
-                      điểm
-                    </span>
-                  </div>
-                  <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-amber-300 font-bold bg-black/20 px-2.5 py-1 rounded-lg">
-                    <Gift className="w-3.5 h-3.5" />
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-black/20 px-3 py-1.5 rounded-lg self-start sm:self-center">
+                    <Gift className="w-4 h-4" />
                     <span>
-                      Quy đổi tương đương:{' '}
-                      <strong className="text-white font-black">
-                        {data.cash_value.toLocaleString('vi-VN')} VNĐ
+                      Tương đương:{' '}
+                      <strong className="text-white text-sm">
+                        {data.cash_value.toLocaleString('vi-VN')} đ
                       </strong>
                     </span>
                   </div>
                 </div>
 
-                {/* Card Bottom: Phone & Stats */}
-                <div className="pt-4 border-t border-white/15 flex flex-wrap items-center justify-between text-xs text-emerald-100 gap-3">
-                  <div className="font-mono font-bold tracking-wider">
-                    SĐT: {data.customer.phone}
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span>
-                      Tích lũy trọn đời:{' '}
-                      <strong>
-                        {data.customer.lifetime_points_earned?.toLocaleString('vi-VN') || 0}
-                      </strong>
-                    </span>
-                    <span>
-                      Đã sử dụng:{' '}
-                      <strong>
-                        {data.customer.lifetime_points_used?.toLocaleString('vi-VN') || 0}
-                      </strong>
-                    </span>
-                  </div>
+                {/* Card Footer: Summary Stats */}
+                <div className="pt-2 border-t border-white/15 flex items-center justify-between text-xs text-emerald-100">
+                  <span>
+                    Tổng điểm đã tích:{' '}
+                    <strong className="text-white">
+                      {data.customer.lifetime_points_earned?.toLocaleString('vi-VN') || 0}
+                    </strong>
+                  </span>
+                  <span>
+                    Đã sử dụng:{' '}
+                    <strong className="text-white">
+                      {data.customer.lifetime_points_used?.toLocaleString('vi-VN') || 0}
+                    </strong>
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Expiring Soon Alert Banner */}
+            {/* Expiring Points Alert */}
             {(data.customer.expiring_soon_points || 0) > 0 && (
-              <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-start gap-3.5 text-amber-200">
-                <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
-                <div className="space-y-1 text-xs sm:text-sm">
-                  <p className="font-black text-amber-300">
-                    Bạn có{' '}
-                    <span className="text-white font-black underline">
-                      {data.customer.expiring_soon_points?.toLocaleString('vi-VN')} điểm
-                    </span>{' '}
-                    sắp hết hạn trong 30 ngày tới!
-                  </p>
-                  <p className="text-amber-200/80">
-                    Hãy sử dụng điểm để đổi nước uống, thuê sân hoặc giảm giá hóa đơn trong lần chơi sân tiếp theo nhé.
-                  </p>
-                </div>
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-800 text-xs sm:text-sm">
+                <Clock className="w-4 h-4 shrink-0 text-amber-600" />
+                <p>
+                  Bạn có{' '}
+                  <strong className="text-amber-900 font-bold">
+                    {data.customer.expiring_soon_points?.toLocaleString('vi-VN')} điểm
+                  </strong>{' '}
+                  sắp hết hạn trong 30 ngày tới. Bạn có thể dùng khi thanh toán tiền sân nhé!
+                </p>
               </div>
             )}
 
-            {/* Details Tabs Card */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-xl">
-              {/* Tab Bar */}
-              <div className="flex border-b border-white/10 px-4 sm:px-6 pt-3 bg-black/20 gap-2 overflow-x-auto">
-                <button
-                  onClick={() => setActiveTab('LOTS')}
-                  className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-                    activeTab === 'LOTS'
-                      ? 'border-emerald-400 text-emerald-300'
-                      : 'border-transparent text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Clock className="w-4 h-4" />
-                  <span>Chi tiết lô điểm & Hạn dùng ({data.lots.length})</span>
-                </button>
+            {/* Detail Tabs */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              {/* Tab Navigation */}
+              <div className="flex border-b border-slate-200 px-4 pt-2 bg-slate-50 gap-2 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('HISTORY')}
-                  className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+                  className={`pb-2.5 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                     activeTab === 'HISTORY'
-                      ? 'border-emerald-400 text-emerald-300'
-                      : 'border-transparent text-slate-400 hover:text-white'
+                      ? 'border-[#1B6C39] text-[#1B6C39]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   <TrendingUp className="w-4 h-4" />
-                  <span>Lịch sử tích / đổi điểm</span>
+                  <span>Lịch sử điểm</span>
                 </button>
+
+                <button
+                  onClick={() => setActiveTab('LOTS')}
+                  className={`pb-2.5 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    activeTab === 'LOTS'
+                      ? 'border-[#1B6C39] text-[#1B6C39]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Hạn dùng điểm ({data.lots.length})</span>
+                </button>
+
                 <button
                   onClick={() => setActiveTab('POLICY')}
-                  className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+                  className={`pb-2.5 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                     activeTab === 'POLICY'
-                      ? 'border-emerald-400 text-emerald-300'
-                      : 'border-transparent text-slate-400 hover:text-white'
+                      ? 'border-[#1B6C39] text-[#1B6C39]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   <HelpCircle className="w-4 h-4" />
-                  <span>Quy tắc đổi điểm</span>
+                  <span>Cách dùng điểm</span>
                 </button>
               </div>
 
               {/* Tab Content */}
-              <div className="p-4 sm:p-6">
-                {/* TAB 1: POINT LOTS */}
-                {activeTab === 'LOTS' && (
-                  <div className="space-y-3">
-                    {data.lots.length === 0 ? (
-                      <p className="text-center py-8 text-sm text-slate-400">
-                        Hiện tại bạn không có lô điểm nào còn hiệu lực.
-                      </p>
-                    ) : (
-                      data.lots.map((lot) => {
-                        const daysLeft = lot.days_left ?? 0;
-                        const isUrgent = daysLeft <= 30;
-
-                        return (
-                          <div
-                            key={lot.id}
-                            className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                          >
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-black text-lg text-white">
-                                  {lot.remaining_points.toLocaleString('vi-VN')} điểm
-                                </span>
-                                <span className="text-xs text-slate-400">
-                                  (ban đầu {lot.original_points.toLocaleString('vi-VN')} điểm)
-                                </span>
-                              </div>
-                              <div className="text-xs text-slate-400 flex items-center gap-2">
-                                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                                <span>Tích ngày: {formatDate(lot.earned_at)}</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
-                              <div className="text-right">
-                                <span className="text-[11px] text-slate-400 block">
-                                  Hạn dùng đến
-                                </span>
-                                <span className="text-xs font-bold text-slate-200">
-                                  {formatDate(lot.expires_at)}
-                                </span>
-                              </div>
-
-                              <span
-                                className={`px-2.5 py-1 rounded-xl text-xs font-black tracking-wide ${
-                                  isUrgent
-                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                }`}
-                              >
-                                {daysLeft > 0 ? `Còn ${daysLeft} ngày` : 'Hôm nay hết hạn'}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-
-                {/* TAB 2: TRANSACTIONS HISTORY */}
+              <div className="p-4 sm:p-5">
+                {/* TAB 1: HISTORY */}
                 {activeTab === 'HISTORY' && (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     {data.transactions.length === 0 ? (
-                      <p className="text-center py-8 text-sm text-slate-400">
-                        Chưa có lịch sử giao dịch nào được ghi nhận.
+                      <p className="text-center py-6 text-xs sm:text-sm text-slate-400">
+                        Chưa có lịch sử giao dịch.
                       </p>
                     ) : (
                       data.transactions.map((tx) => {
@@ -470,44 +356,90 @@ export default function CustomerLookupPage() {
                         return (
                           <div
                             key={tx.id}
-                            className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-3"
+                            className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-3"
                           >
                             <div className="space-y-0.5">
-                              <p className="text-xs sm:text-sm font-bold text-white">
+                              <p className="text-xs sm:text-sm font-semibold text-slate-800">
                                 {tx.description ||
                                   (tx.type === 'EARN'
-                                    ? 'Tích điểm thanh toán tiền sân'
-                                    : 'Đổi điểm ưu đãi')}
+                                    ? 'Cộng điểm đặt sân'
+                                    : 'Dùng điểm giảm giá')}
                               </p>
-                              <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
                                 <span>{dateObj.time}</span>
                                 <span>•</span>
                                 <span>{dateObj.date}</span>
-                                {tx.reference_id && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="font-mono text-emerald-400/80">
-                                      {tx.reference_id}
-                                    </span>
-                                  </>
-                                )}
                               </div>
                             </div>
 
                             <div className="text-right shrink-0">
                               <span
-                                className={`font-black text-sm sm:text-base ${
-                                  isPositive ? 'text-emerald-400' : 'text-rose-400'
+                                className={`font-extrabold text-sm sm:text-base ${
+                                  isPositive ? 'text-emerald-600' : 'text-rose-600'
                                 }`}
                               >
-                                {isPositive ? `+${tx.points.toLocaleString('vi-VN')}` : tx.points.toLocaleString('vi-VN')}
+                                {isPositive
+                                  ? `+${tx.points.toLocaleString('vi-VN')}`
+                                  : tx.points.toLocaleString('vi-VN')}
                               </span>
-                              <span className="text-[10px] text-slate-400 block font-semibold">
-                                {tx.type === 'EARN'
-                                  ? 'Cộng điểm'
-                                  : tx.type === 'REDEEM'
-                                  ? 'Trừ điểm'
-                                  : 'Biến động'}
+                              <span className="text-[10px] text-slate-400 block">
+                                {tx.type === 'EARN' ? 'Cộng điểm' : 'Trừ điểm'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: LOTS */}
+                {activeTab === 'LOTS' && (
+                  <div className="space-y-2.5">
+                    {data.lots.length === 0 ? (
+                      <p className="text-center py-6 text-xs sm:text-sm text-slate-400">
+                        Không có điểm nào còn hạn dùng.
+                      </p>
+                    ) : (
+                      data.lots.map((lot) => {
+                        const daysLeft = lot.days_left ?? 0;
+                        const isUrgent = daysLeft <= 30;
+
+                        return (
+                          <div
+                            key={lot.id}
+                            className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-base text-slate-900">
+                                  {lot.remaining_points.toLocaleString('vi-VN')} điểm
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  (tích ban đầu: {lot.original_points.toLocaleString('vi-VN')})
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Tích ngày: {formatDate(lot.earned_at)}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200">
+                              <div className="text-right">
+                                <span className="text-[11px] text-slate-400 block">Hạn đến</span>
+                                <span className="text-xs font-semibold text-slate-700">
+                                  {formatDate(lot.expires_at)}
+                                </span>
+                              </div>
+
+                              <span
+                                className={`px-2 py-0.5 rounded-lg text-xs font-bold ${
+                                  isUrgent
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {daysLeft > 0 ? `Còn ${daysLeft} ngày` : 'Hết hạn hôm nay'}
                               </span>
                             </div>
                           </div>
@@ -519,35 +451,30 @@ export default function CustomerLookupPage() {
 
                 {/* TAB 3: POLICY */}
                 {activeTab === 'POLICY' && (
-                  <div className="space-y-4 text-xs sm:text-sm text-slate-300">
-                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
-                      <h4 className="font-bold text-emerald-300 flex items-center gap-2 text-sm">
-                        <Award className="w-4 h-4" />
-                        <span>Chính Sách Tích & Đổi Điểm Tại HL Sport</span>
-                      </h4>
-                      <ul className="space-y-1.5 list-disc list-inside text-slate-300">
+                  <div className="space-y-3 text-xs sm:text-sm text-slate-600">
+                    <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-100 space-y-2.5">
+                      <p className="font-bold text-emerald-900 text-sm">
+                        Quy định tích & dùng điểm:
+                      </p>
+                      <ul className="space-y-2 list-disc list-inside text-slate-700">
                         <li>
-                          <strong>Tỷ lệ tích điểm:</strong> Mỗi{' '}
-                          <span className="text-white font-bold">
-                            {data.settings.amount_per_point.toLocaleString('vi-VN')}đ
+                          <strong>Tích điểm:</strong> Mỗi{' '}
+                          <span className="font-bold text-slate-900">
+                            {data.settings.amount_per_point.toLocaleString('vi-VN')} đ
                           </span>{' '}
-                          thanh toán tiền sân được cộng{' '}
-                          <span className="text-emerald-400 font-bold">
+                          tiền sân được cộng{' '}
+                          <span className="font-bold text-emerald-700">
                             {data.settings.points_per_amount} điểm
                           </span>.
                         </li>
                         <li>
-                          <strong>Thời hạn sử dụng:</strong> Điểm có giá trị trong vòng{' '}
-                          <span className="text-white font-bold">
+                          <strong>Thời hạn:</strong> Điểm có hạn dùng trong{' '}
+                          <span className="font-bold text-slate-900">
                             {data.settings.expiry_days} ngày
-                          </span>{' '}
-                          kể từ ngày tích.
+                          </span>. Điểm sắp hết hạn sẽ được ưu tiên dùng trước.
                         </li>
                         <li>
-                          <strong>Quy tắc trừ điểm FEFO:</strong> Khi đổi điểm, hệ thống luôn tự động trừ điểm ở các lô sắp hết hạn trước nhất để bảo toàn tối đa quyền lợi cho bạn.
-                        </li>
-                        <li>
-                          <strong>Cách đổi ưu đãi:</strong> Báo với thu ngân số điện thoại và số điểm muốn sử dụng khi thanh toán tiền sân hoặc mua phụ kiện, nước uống tại sân.
+                          <strong>Sử dụng điểm:</strong> Báo số điện thoại cho thu ngân khi thanh toán để trừ tiền trực tiếp vào hóa đơn.
                         </li>
                       </ul>
                     </div>
@@ -560,11 +487,8 @@ export default function CustomerLookupPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 bg-slate-900/60 py-6 text-center text-xs text-slate-500">
-        <div className="max-w-4xl mx-auto px-4 space-y-1">
-          <p className="font-bold text-slate-400">HL Badminton Sport • Hệ Thống Sân Cầu Lông Tiêu Chuẩn</p>
-          <p>Mọi thắc mắc về điểm thưởng, vui lòng liên hệ quầy thu ngân tại sân để được hỗ trợ trực tiếp.</p>
-        </div>
+      <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
+        <p>HL Badminton Sport • Hệ Thống Sân Cầu Lông Tiêu Chuẩn</p>
       </footer>
     </div>
   );
