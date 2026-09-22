@@ -201,7 +201,7 @@ export function Sidebar({
           {!collapsed && (
             <div className="flex flex-col text-[11px] text-emerald-200/80">
               <span className="font-semibold text-white">Hệ thống Tích Điểm HL</span>
-              <span className="text-emerald-300/70 font-mono text-[10px]">v1.0 • FEFO Ledger</span>
+              <span className="text-emerald-300/70 text-[10px]">HL Badminton Sport</span>
             </div>
           )}
           <button

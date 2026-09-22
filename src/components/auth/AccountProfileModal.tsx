@@ -189,7 +189,7 @@ export function AccountProfileModal({
                       : 'bg-blue-100 text-blue-800 border border-blue-200'
                   }`}
                 >
-                  {user.role === 'ADMIN' ? 'Toàn quyền Admin' : 'Nhân viên thu ngân'}
+                  {user.role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'}
                 </div>
               </div>
 

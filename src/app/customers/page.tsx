@@ -190,7 +190,7 @@ export default function CustomersPage() {
                     {/* Status */}
                     <td className="py-3.5 px-4 text-center">
                       <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                        {c.status}
+                        {c.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
                       </span>
                     </td>
 

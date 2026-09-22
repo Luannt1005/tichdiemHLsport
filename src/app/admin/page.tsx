@@ -462,8 +462,8 @@ export default function AdminManagementPage() {
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
           >
             <option value="ALL">Tất cả vai trò</option>
-            <option value="ADMIN">Chỉ Quản trị viên (ADMIN)</option>
-            <option value="STAFF">Chỉ Thu ngân (STAFF)</option>
+            <option value="ADMIN">Quản trị viên</option>
+            <option value="STAFF">Thu ngân</option>
           </select>
         </div>
 
@@ -561,8 +561,8 @@ export default function AdminManagementPage() {
                               : 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
                           }`}
                         >
-                          <option value="STAFF">STAFF (Thu Ngân)</option>
-                          <option value="ADMIN">ADMIN (Quản Trị)</option>
+                          <option value="STAFF">Thu Ngân</option>
+                          <option value="ADMIN">Quản Trị</option>
                         </select>
                       </td>
 

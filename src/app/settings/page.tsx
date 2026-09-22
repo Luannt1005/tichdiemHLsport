@@ -197,18 +197,18 @@ export default function SettingsPage() {
             {[
               {
                 mode: 'FLOOR',
-                title: 'Floor (Làm tròn xuống)',
-                desc: 'Khuyến nghị mặc định. Không phát sinh số thập phân thừa.',
+                title: 'Làm tròn xuống',
+                desc: 'Khuyến nghị dùng. Bỏ phần số lẻ phía sau.',
               },
               {
                 mode: 'ROUND',
-                title: 'Round (Làm tròn gần nhất)',
+                title: 'Làm tròn gần nhất',
                 desc: 'Từ 0.5 trở lên làm tròn lên 1 điểm, dưới 0.5 làm tròn xuống.',
               },
               {
                 mode: 'CEIL',
-                title: 'Ceil (Làm tròn lên)',
-                desc: 'Bất kỳ phần thập phân nào cũng được làm tròn lên 1 điểm.',
+                title: 'Làm tròn lên',
+                desc: 'Bất kỳ phần số lẻ nào cũng được làm tròn lên 1 điểm.',
               },
             ].map((opt) => (
               <label
@@ -241,11 +241,11 @@ export default function SettingsPage() {
           {/* Interactive Calculator Simulator */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 mt-3 space-y-3">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-blue-600" /> Trình Giả Lập Thử Nghiệm Quy Tắc Làm Tròn
+              <Info className="w-4 h-4 text-blue-600" /> Thử nghiệm tính điểm thực tế
             </span>
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <div className="w-full sm:w-60">
-                <span className="text-[11px] text-slate-500 block mb-1">Nhập số tiền mẫu:</span>
+                <span className="text-[11px] text-slate-500 block mb-1">Nhập số tiền hóa đơn:</span>
                 <input
                   type="number"
                   step="5000"
@@ -256,21 +256,21 @@ export default function SettingsPage() {
               </div>
               <div className="flex-1 grid grid-cols-3 gap-2 w-full text-center text-xs">
                 <div className="p-2 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Nếu Floor:</span>
+                  <span className="text-[10px] text-slate-400 block">Làm tròn xuống:</span>
                   <span className="font-bold text-slate-800">{sandboxFloor} điểm</span>
                 </div>
                 <div className="p-2 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Nếu Round:</span>
+                  <span className="text-[10px] text-slate-400 block">Làm tròn gần nhất:</span>
                   <span className="font-bold text-slate-800">{sandboxRound} điểm</span>
                 </div>
                 <div className="p-2 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Nếu Ceil:</span>
+                  <span className="text-[10px] text-slate-400 block">Làm tròn lên:</span>
                   <span className="font-bold text-slate-800">{sandboxCeil} điểm</span>
                 </div>
               </div>
             </div>
             <div className="text-xs text-emerald-800 font-semibold pt-1">
-              → Với cấu hình đang chọn ({setting.rounding_mode}): Khách sẽ nhận được{' '}
+              → Khách sẽ nhận được:{' '}
               <span className="text-emerald-700 font-bold underline">{currentResult} điểm</span>
             </div>
           </div>
@@ -280,12 +280,12 @@ export default function SettingsPage() {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
             <Calendar className="w-5 h-5 text-rose-600" />
-            <h3 className="text-base font-bold text-slate-900">Thời Hạn Hiệu Lực Của Điểm</h3>
+            <h3 className="text-base font-bold text-slate-900">Thời Hạn Sử Dụng Điểm</h3>
           </div>
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Điểm có hiệu lực trong bao nhiêu ngày? <span className="text-rose-500">*</span>
+              Số ngày điểm có hiệu lực <span className="text-rose-500">*</span>
             </label>
             <div className="flex items-center gap-3">
               <input
@@ -324,45 +324,16 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Critical Architecture Rule Callout */}
-          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 space-y-1.5 leading-relaxed">
+          {/* Note */}
+          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 space-y-1 leading-relaxed">
             <div className="font-bold flex items-center gap-1.5 text-amber-800">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              Nguyên Tắc Bất Biến Về Expiry Của Point Lots:
+              Lưu ý về hạn dùng:
             </div>
             <p>
-              Hạn sử dụng được lưu trực tiếp và độc lập tại từng <strong>Point Lot</strong> vào thời điểm cộng điểm.
-              Khi bạn thay đổi thời hạn sang {setting.expiry_days} ngày, các lô điểm cũ đã cộng trước đây{' '}
-              <strong>vẫn giữ nguyên ngày hết hạn ban đầu</strong>, đảm bảo quyền lợi và sự minh bạch cho hội viên.
+              Khi bạn thay đổi thời hạn sang {setting.expiry_days} ngày, các điểm đã tích trước đây vẫn giữ nguyên ngày hết hạn ban đầu để đảm bảo quyền lợi cho khách hàng.
             </p>
           </div>
-        </div>
-
-        {/* Section 4: Supabase Database Migration Info */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Database className="w-5 h-5 text-teal-600" />
-              <h3 className="text-base font-bold text-slate-900">Kết Nối Supabase PostgreSQL Live</h3>
-            </div>
-            <button
-              type="button"
-              onClick={handleCopySchemaSql}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 transition-colors"
-            >
-              {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedSql ? 'Đã sao chép!' : 'Copy hướng dẫn SQL'}</span>
-            </button>
-          </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Hệ thống đã tự động tạo sẵn 2 file SQL hoàn chỉnh trong thư mục dự án của bạn:
-            <br />
-            1. <code className="font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">supabase_schema.sql</code>: Chứa toàn bộ bảng, RLS, và các hàm RPC Stored Procedures atomic.
-            <br />
-            2. <code className="font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">supabase_seed.sql</code>: Chứa 10 khách hàng mẫu và dữ liệu giao dịch phong phú.
-            <br />
-            Bạn chỉ cần mở Supabase Dashboard project <strong>dzemhqkvccmpoaumoytf</strong>, dán và chạy trong SQL Editor là hệ thống tự động đồng bộ Live.
-          </p>
         </div>
 
         {/* Submit */}

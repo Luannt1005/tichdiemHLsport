@@ -140,7 +140,7 @@ export function Header({
                     role === 'ADMIN' ? 'text-emerald-700' : 'text-blue-700'
                   }`}
                 >
-                  {role === 'ADMIN' ? 'Admin' : 'Thu Ngân'}
+                  {role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'}
                 </span>
               </div>
 

@@ -65,11 +65,11 @@ export default function HistoryPage() {
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 text-xs font-semibold text-slate-600">
           {[
             { key: 'ALL', label: 'Tất cả' },
-            { key: 'EARN', label: '+ Tích điểm (EARN)' },
-            { key: 'REDEEM', label: '- Dùng điểm (REDEEM)' },
-            { key: 'EXPIRE', label: 'Hết hạn (EXPIRE)' },
-            { key: 'ADJUST', label: 'Điều chỉnh (ADJUST)' },
-            { key: 'REFUND', label: '+ Hoàn điểm (REFUND)' },
+            { key: 'EARN', label: '+ Tích điểm' },
+            { key: 'REDEEM', label: '- Dùng điểm' },
+            { key: 'EXPIRE', label: 'Hết hạn' },
+            { key: 'ADJUST', label: 'Điều chỉnh' },
+            { key: 'REFUND', label: '+ Hoàn điểm' },
           ].map((item) => (
             <button
               key={item.key}

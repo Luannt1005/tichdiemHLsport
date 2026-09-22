@@ -20,7 +20,7 @@ import { activityLogService } from '@/lib/services/activity-log-service';
 import { useToast } from '@/components/ui/Toast';
 
 // Badminton Shuttlecock SVG Icon
-function ShuttlecockIcon({ className = 'w-8 h-8' }: { className?: string }) {
+function ShuttlecockIcon({ className = 'w-7 h-7' }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -77,14 +77,14 @@ export default function LoginPage() {
           'LOGIN',
           'AUTH',
           res.user.id,
-          `Đăng nhập thành công với tài khoản ${res.user.name} (${res.user.role})`,
+          `Đăng nhập thành công với tài khoản ${res.user.name} (${res.user.role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'})`,
           { role: res.user.role, username: res.user.username }
         );
 
         success('Đăng nhập thành công', `Chào mừng ${res.user.name} trở lại hệ thống!`);
         router.push('/customers');
       } else {
-        setErrorMsg(res.error || 'Đăng nhập không thành công');
+        setErrorMsg(res.error || 'Tên đăng nhập hoặc mật khẩu không chính xác');
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Có lỗi xảy ra khi đăng nhập');
@@ -109,7 +109,7 @@ export default function LoginPage() {
           'LOGIN',
           'AUTH',
           res.user.id,
-          `Đăng nhập nhanh thành công với vai trò ${res.user.role} (${res.user.name})`,
+          `Đăng nhập nhanh thành công với vai trò ${res.user.role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'} (${res.user.name})`,
           { role: res.user.role, username: res.user.username, type: 'QUICK_LOGIN' }
         );
 
@@ -126,76 +126,58 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 relative overflow-hidden bg-slate-900">
-      {/* Dynamic Badminton Court Background */}
-      <div
-        className="absolute inset-0 z-0 opacity-40"
-        style={{
-          background: 'radial-gradient(circle at 50% 20%, #207D43 0%, #134F29 60%, #0B2B16 100%)',
-        }}
-      />
-
-      {/* Decorative Badminton Court Lines */}
-      <div className="absolute inset-0 pointer-events-none opacity-10">
-        <div className="w-full h-full border-8 border-white/40 max-w-4xl max-h-[85vh] m-auto rounded-3xl grid grid-cols-2 grid-rows-2">
-          <div className="border-r border-b border-white/30" />
-          <div className="border-b border-white/30" />
-          <div className="border-r border-white/30" />
-          <div />
-        </div>
-      </div>
-
+    <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 bg-slate-50 text-slate-800">
       {/* Main Login Card */}
-      <div className="relative z-10 w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6 sm:p-8 transition-all">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#207D43] to-[#134F29] text-white flex items-center justify-center shadow-lg shadow-emerald-900/30 mb-3 ring-4 ring-emerald-50">
-            <ShuttlecockIcon className="w-9 h-9" />
+        <div className="flex flex-col items-center text-center">
+          <div className="w-14 h-14 rounded-2xl bg-[#1B6C39] text-white flex items-center justify-center shadow-sm mb-3">
+            <ShuttlecockIcon className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900">
             Đăng Nhập Hệ Thống
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-500 mt-1">
             Quản lý tích điểm sân cầu lông HL Sport
           </p>
         </div>
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-rose-700 text-xs sm:text-sm animate-shake">
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <div className="font-semibold">{errorMsg}</div>
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-700 text-xs sm:text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+            <span className="font-semibold">{errorMsg}</span>
           </div>
         )}
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Tài khoản hoặc Email
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Tên đăng nhập
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <User className="w-5 h-5" />
+                <User className="w-4 h-4 text-emerald-700" />
               </div>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Nhập 'admin' hoặc 'nhanvien'"
+                placeholder="Nhập tên đăng nhập"
                 required
-                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white transition-all text-sm"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white text-sm"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Mật khẩu
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Lock className="w-5 h-5" />
+                <Lock className="w-4 h-4 text-emerald-700" />
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -203,14 +185,14 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Nhập mật khẩu"
                 required
-                className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white transition-all text-sm"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white text-sm"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -218,97 +200,76 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-[#207D43] to-[#134F29] hover:from-[#1b6b3a] hover:to-[#0f3e20] text-white font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+            className="w-full py-3 px-4 bg-[#1B6C39] hover:bg-[#14532b] text-white font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                <span>Đăng nhập hệ thống</span>
+                <span>Đăng nhập</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        {/* 1-Click Quick Login Section */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <div className="flex items-center gap-2 mb-3 text-slate-500 text-xs font-bold uppercase tracking-wider justify-center">
+        {/* Quick Login Section */}
+        <div className="pt-4 border-t border-slate-100 space-y-2.5">
+          <div className="flex items-center gap-1.5 text-slate-500 text-xs font-bold justify-center">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Đăng nhập nhanh 1-Click</span>
+            <span>Đăng nhập nhanh một chạm:</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => handleQuickLogin('ADMIN')}
               disabled={loading}
-              className="group p-3 border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/70 rounded-xl text-left transition-all flex flex-col justify-between"
+              className="p-2.5 border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/60 rounded-xl text-left transition-all cursor-pointer"
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-black text-emerald-800 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  ADMIN
-                </span>
-                <span className="text-[10px] bg-emerald-200/80 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
-                  admin
-                </span>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span className="text-xs font-bold text-emerald-900">Quản trị viên</span>
               </div>
-              <p className="text-[11px] text-emerald-700/80 line-clamp-1 font-medium">
-                Toàn quyền quản trị
-              </p>
+              <span className="text-[11px] text-emerald-700 font-mono">admin</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleQuickLogin('STAFF')}
               disabled={loading}
-              className="group p-3 border border-blue-200 bg-blue-50/50 hover:bg-blue-100/70 rounded-xl text-left transition-all flex flex-col justify-between"
+              className="p-2.5 border border-blue-200 bg-blue-50/60 hover:bg-blue-100/60 rounded-xl text-left transition-all cursor-pointer"
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-black text-blue-800 flex items-center gap-1">
-                  <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                  THU NGÂN
-                </span>
-                <span className="text-[10px] bg-blue-200/80 text-blue-800 font-bold px-1.5 py-0.5 rounded">
-                  nhanvien
-                </span>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <UserCheck className="w-4 h-4 text-blue-700" />
+                <span className="text-xs font-bold text-blue-900">Thu ngân</span>
               </div>
-              <p className="text-[11px] text-blue-700/80 line-clamp-1 font-medium">
-                Thu ngân & tích điểm
-              </p>
+              <span className="text-[11px] text-blue-700 font-mono">nhanvien</span>
             </button>
           </div>
         </div>
 
-        {/* Link to Dedicated Register Page */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col gap-2.5 text-center text-xs font-bold">
+        {/* Links */}
+        <div className="pt-2 flex flex-col gap-2 text-center text-xs font-semibold">
           <Link
             href="/register"
-            className="inline-flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-emerald-300 bg-slate-50 hover:bg-emerald-50/50 text-slate-700 hover:text-[#1B6C39] transition-all"
+            className="inline-flex items-center justify-center gap-1.5 p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 transition-all"
           >
-            <UserPlus className="w-4 h-4 text-[#1B6C39]" />
+            <UserPlus className="w-3.5 h-3.5 text-[#1B6C39]" />
             <span>Chưa có tài khoản?</span>
-            <span className="text-[#1B6C39] underline decoration-emerald-400 decoration-2 underline-offset-2">
-              Tạo tài khoản mới tại đây
+            <span className="text-[#1B6C39] font-bold underline decoration-emerald-400">
+              Tạo tài khoản mới
             </span>
           </Link>
 
           <Link
             href="/lookup"
-            className="inline-flex items-center justify-center gap-1.5 text-slate-500 hover:text-slate-800 transition-colors pt-1"
+            className="inline-flex items-center justify-center gap-1 text-slate-500 hover:text-slate-800 transition-colors pt-1"
           >
             <span>Khách chơi sân?</span>
-            <span className="underline decoration-slate-400 underline-offset-2">
-              Tra cứu điểm hội viên
-            </span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span className="underline">Tra cứu điểm thưởng tại đây</span>
+            <ArrowRight className="w-3 h-3" />
           </Link>
-        </div>
-
-        {/* Footer info */}
-        <div className="mt-4 text-center text-xs text-slate-400 font-medium">
-          Hệ thống Quản lý Sân Cầu Lông HL Sport • v1.0
         </div>
       </div>
     </div>

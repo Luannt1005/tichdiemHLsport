@@ -122,7 +122,15 @@ export default function DashboardPage() {
                             : 'bg-indigo-100 text-indigo-800'
                         }`}
                       >
-                        {tx.type}
+                        {tx.type === 'EARN'
+                          ? 'Tích điểm'
+                          : tx.type === 'REDEEM'
+                          ? 'Đổi điểm'
+                          : tx.type === 'EXPIRE'
+                          ? 'Hết hạn'
+                          : tx.type === 'ADJUST'
+                          ? 'Điều chỉnh'
+                          : 'Hoàn điểm'}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right font-bold">

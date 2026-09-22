@@ -252,20 +252,20 @@ export default function LogsPage() {
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
           >
             <option value="ALL">Tất cả hành động</option>
-            <option value="LOGIN">Đăng nhập (LOGIN)</option>
-            <option value="LOGOUT">Đăng xuất (LOGOUT)</option>
-            <option value="USER_REGISTER">Đăng ký tài khoản (REGISTER)</option>
-            <option value="USER_UPDATE_ROLE">Đổi quyền hạn (ROLE)</option>
+            <option value="LOGIN">Đăng nhập</option>
+            <option value="LOGOUT">Đăng xuất</option>
+            <option value="USER_REGISTER">Đăng ký tài khoản</option>
+            <option value="USER_UPDATE_ROLE">Đổi quyền hạn</option>
             <option value="USER_STATUS_CHANGE">Khóa / Mở tài khoản</option>
             <option value="USER_RESET_PASSWORD">Đặt lại mật khẩu</option>
             <option value="USER_DELETE">Xóa tài khoản</option>
             <option value="CUSTOMER_CREATE">Tạo khách hàng</option>
             <option value="CUSTOMER_UPDATE">Cập nhật khách hàng</option>
             <option value="CUSTOMER_DELETE">Xóa khách hàng</option>
-            <option value="POINTS_EARN">Tích điểm (EARN)</option>
-            <option value="POINTS_REDEEM">Đổi điểm (REDEEM)</option>
-            <option value="POINTS_ADJUST">Điều chỉnh điểm (ADJUST)</option>
-            <option value="SETTINGS_UPDATE">Đổi cài đặt (SETTINGS)</option>
+            <option value="POINTS_EARN">Tích điểm</option>
+            <option value="POINTS_REDEEM">Đổi điểm</option>
+            <option value="POINTS_ADJUST">Điều chỉnh điểm</option>
+            <option value="SETTINGS_UPDATE">Đổi cài đặt</option>
           </select>
         </div>
 
@@ -280,8 +280,8 @@ export default function LogsPage() {
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
           >
             <option value="ALL">Tất cả vai trò</option>
-            <option value="ADMIN">Chỉ Admin</option>
-            <option value="STAFF">Chỉ Nhân viên</option>
+            <option value="ADMIN">Quản trị viên</option>
+            <option value="STAFF">Thu ngân</option>
           </select>
         </div>
       </div>
@@ -297,7 +297,7 @@ export default function LogsPage() {
                 <th className="py-3.5 px-4">Hành động</th>
                 <th className="py-3.5 px-4">Đối tượng</th>
                 <th className="py-3.5 px-4">Nội dung chi tiết</th>
-                <th className="py-3.5 px-4 text-center">Payload</th>
+                <th className="py-3.5 px-4 text-center">Dữ liệu chi tiết</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
