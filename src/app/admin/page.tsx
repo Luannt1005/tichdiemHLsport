@@ -324,10 +324,6 @@ export default function AdminManagementPage() {
     return matchQuery && matchRole && matchStatus;
   });
 
-  const totalAdmins = users.filter((u) => u.role === 'ADMIN').length;
-  const totalStaff = users.filter((u) => u.role === 'STAFF').length;
-  const totalActive = users.filter((u) => u.is_active).length;
-
   const formatDate = (isoStr?: string | null) => {
     if (!isoStr) return 'Chưa đăng nhập';
     try {
@@ -344,31 +340,58 @@ export default function AdminManagementPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#207D43] to-[#134F29] text-white flex items-center justify-center shadow-md shadow-emerald-950/20">
-            <ShieldCheck className="w-6 h-6" />
+    <div className="space-y-4">
+      {/* Toolbar: Search, Filters & Add Button */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center gap-3">
+        {/* Search */}
+        <div className="relative flex-1 w-full">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <Search className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="text-xl font-black text-slate-900 leading-tight">
-              Quản Trị Hệ Thống & Phân Quyền
-            </h2>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Quản lý danh sách tài khoản, phân quyền quản trị/thu ngân và bảo mật hệ thống
-            </p>
-          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo họ tên, tên đăng nhập (@username), email..."
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white transition-all"
+          />
         </div>
 
-        <div className="flex items-center gap-2.5">
+        {/* Role Filter */}
+        <div className="w-full md:w-44">
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
+          >
+            <option value="ALL">Tất cả vai trò</option>
+            <option value="ADMIN">Quản trị viên</option>
+            <option value="STAFF">Thu ngân</option>
+          </select>
+        </div>
+
+        {/* Status Filter */}
+        <div className="w-full md:w-44">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="ACTIVE">Đang hoạt động</option>
+            <option value="INACTIVE">Đã bị khóa</option>
+          </select>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
           <button
             onClick={() => {
               loadUsers();
               info('Đang làm mới', 'Đang tải lại danh sách tài khoản');
             }}
             disabled={loading}
-            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all shadow-sm disabled:opacity-50"
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all shadow-xs disabled:opacity-50 cursor-pointer"
             title="Làm mới dữ liệu"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#1B6C39]' : ''}`} />
@@ -379,104 +402,11 @@ export default function AdminManagementPage() {
               setModalError('');
               setShowCreateModal(true);
             }}
-            className="px-4 py-2.5 bg-[#1B6C39] hover:bg-[#15592e] text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2 text-xs sm:text-sm"
+            className="px-4 py-2 bg-[#1B6C39] hover:bg-[#15592e] text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 text-xs sm:text-sm whitespace-nowrap cursor-pointer flex-1 md:flex-initial"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Thêm tài khoản mới</span>
+            <span>Thêm tài khoản</span>
           </button>
-        </div>
-      </div>
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Tổng tài khoản
-            </span>
-            <span className="text-xl font-black text-slate-900">{users.length}</span>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider block">
-              Quản trị viên
-            </span>
-            <span className="text-xl font-black text-emerald-800">{totalAdmins}</span>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
-            <UserCheck className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider block">
-              Thu ngân
-            </span>
-            <span className="text-xl font-black text-blue-800">{totalStaff}</span>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-50 text-green-700 flex items-center justify-center">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-bold text-green-600 uppercase tracking-wider block">
-              Đang hoạt động
-            </span>
-            <span className="text-xl font-black text-green-800">
-              {totalActive} / {users.length}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row gap-3">
-        <div className="relative flex-1">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-            <Search className="w-4 h-4" />
-          </div>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo họ tên, tên đăng nhập (@username), email..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white transition-all"
-          />
-        </div>
-
-        <div className="w-full md:w-48">
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
-          >
-            <option value="ALL">Tất cả vai trò</option>
-            <option value="ADMIN">Quản trị viên</option>
-            <option value="STAFF">Thu ngân</option>
-          </select>
-        </div>
-
-        <div className="w-full md:w-48">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
-          >
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="ACTIVE">Đang hoạt động</option>
-            <option value="INACTIVE">Đã bị khóa</option>
-          </select>
         </div>
       </div>
 
