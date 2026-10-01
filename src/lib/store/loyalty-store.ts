@@ -1312,10 +1312,6 @@ class LoyaltyStore {
     );
 
     // 1b. Calculate bonus points from milestone tiers
-    const { bonusPoints, matchedTier } = calculateBonusPoints(
-      params.amount,
-      this.settings.bonus_tiers
-    );
     const pointsEarned = basePoints + bonusPoints;
 
     // 2. Expiry date computed at EARN time from current settings
