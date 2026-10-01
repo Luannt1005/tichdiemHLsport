@@ -64,6 +64,7 @@ export default function SettingsPage() {
         points_per_amount: setting.points_per_amount,
         rounding_mode: setting.rounding_mode,
         expiry_days: setting.expiry_days,
+        bonus_tiers: setting.bonus_tiers,
       });
 
       success(

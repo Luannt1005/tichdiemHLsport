@@ -1207,12 +1207,22 @@ class LoyaltyStore {
 
     const cleaned = params.phone.replace(/[\s.-]/g, '');
 
+    // Tính điểm thưởng theo mốc
+    const { bonusPoints, matchedTier } = calculateBonusPoints(
+      params.amount,
+      this.settings.bonus_tiers
+    );
+
     if (this.isSupabaseLive) {
+      const bonusDesc = matchedTier
+        ? ` + Thưởng mốc ${matchedTier.label || (matchedTier.minAmount / 1000000).toFixed(0) + 'tr'} (+${bonusPoints}đ)`
+        : '';
+
       const { data, error } = await supabase.rpc('earn_points_atomic', {
         p_phone: cleaned,
         p_name: params.name || '',
         p_amount: params.amount,
-        p_description: params.description || 'Tích điểm thanh toán tiền sân',
+        p_description: (params.description || 'Tích điểm thanh toán tiền sân') + bonusDesc,
         p_reference_type: params.referenceType || 'BOOKING',
         p_reference_id: params.referenceId || null,
         p_created_by: params.createdBy || (this.currentRole === 'ADMIN' ? 'ADMIN' : 'STAFF'),
@@ -1222,11 +1232,27 @@ class LoyaltyStore {
         throw new Error(error.message || 'Lỗi tích điểm trên Database');
       }
 
+      // Nếu có điểm thưởng mốc, tự động cộng thêm qua RPC adjust_points_atomic vào Database Supabase
+      if (bonusPoints > 0) {
+        try {
+          await supabase.rpc('adjust_points_atomic', {
+            p_customer_id: data.customer_id,
+            p_points_delta: bonusPoints,
+            p_reason: `Điểm thưởng mốc hóa đơn: ${matchedTier?.label || 'Mốc hóa đơn'} (+${bonusPoints} điểm)`,
+            p_created_by: params.createdBy || (this.currentRole === 'ADMIN' ? 'ADMIN' : 'STAFF'),
+          });
+        } catch (adjErr) {
+          console.warn('Lỗi cộng thưởng mốc Supabase:', adjErr);
+        }
+      }
+
       const { data: customer } = await supabase
         .from('customers')
         .select('*')
         .eq('id', data.customer_id)
         .single();
+
+      const totalEarned = data.points_earned + bonusPoints;
 
       const transaction: PointTransaction = {
         id: data.transaction_id,
@@ -1234,11 +1260,11 @@ class LoyaltyStore {
         customer_name: customer?.name || params.name || 'Khách hàng',
         customer_phone: customer?.phone || cleaned,
         type: 'EARN',
-        points: data.points_earned,
+        points: totalEarned,
         amount: params.amount,
         reference_type: params.referenceType || 'BOOKING',
         reference_id: params.referenceId || null,
-        description: params.description || 'Tích điểm thanh toán tiền sân',
+        description: (params.description || 'Tích điểm thanh toán tiền sân') + bonusDesc,
         created_by: params.createdBy || (this.currentRole === 'ADMIN' ? 'ADMIN' : 'STAFF'),
         created_at: new Date().toISOString(),
       };
@@ -1247,8 +1273,8 @@ class LoyaltyStore {
         id: data.point_lot_id,
         customer_id: data.customer_id,
         transaction_id: data.transaction_id,
-        original_points: data.points_earned,
-        remaining_points: data.points_earned,
+        original_points: totalEarned,
+        remaining_points: totalEarned,
         earned_at: new Date().toISOString(),
         expires_at: data.expires_at,
         status: 'ACTIVE',
@@ -1270,11 +1296,11 @@ class LoyaltyStore {
         'POINTS_EARN',
         'POINT_TRANSACTION',
         transaction.id,
-        `Tích +${data.points_earned.toLocaleString('vi-VN')} điểm cho khách hàng ${customer?.name || params.name || cleaned} từ hóa đơn ${params.amount.toLocaleString('vi-VN')}đ`,
-        { phone: cleaned, name: customer?.name || params.name, points: data.points_earned, amount: params.amount, transactionId: transaction.id }
+        `Tích +${totalEarned.toLocaleString('vi-VN')} điểm cho khách hàng ${customer?.name || params.name || cleaned} từ hóa đơn ${params.amount.toLocaleString('vi-VN')}đ${matchedTier ? ` (bao gồm ${bonusPoints} điểm thưởng mốc)` : ''}`,
+        { phone: cleaned, name: customer?.name || params.name, points: totalEarned, basePoints: data.points_earned, bonusPoints, amount: params.amount, transactionId: transaction.id }
       );
 
-      return { customer: customer || this.customers[0], transaction, lot, pointsEarned: data.points_earned };
+      return { customer: customer || this.customers[0], transaction, lot, pointsEarned: totalEarned };
     }
 
     // 1. Calculate base points by current settings
@@ -1698,8 +1724,12 @@ class LoyaltyStore {
           .limit(1)
           .maybeSingle();
         if (!error && data) {
-          this.settings = data;
-          return data;
+          this.settings = {
+            ...this.settings,
+            ...data,
+            bonus_tiers: data.bonus_tiers || this.settings.bonus_tiers || DEFAULT_SETTING.bonus_tiers,
+          };
+          return { ...this.settings };
         }
       } catch (_) {}
     }
@@ -1715,9 +1745,15 @@ class LoyaltyStore {
       await this.checkSupabaseConnection();
     }
 
+    // Luôn lưu mốc thưởng vào state nội bộ
+    if (newSettings.bonus_tiers !== undefined) {
+      this.settings.bonus_tiers = newSettings.bonus_tiers;
+    }
+
     if (this.isSupabaseLive) {
       try {
-        const { data, error } = await supabase
+        // 1. Thử update cả newSettings vào Supabase (nếu DB đã có cột bonus_tiers)
+        let updateRes = await supabase
           .from('point_settings')
           .update({
             ...newSettings,
@@ -1727,17 +1763,37 @@ class LoyaltyStore {
           .eq('is_active', true)
           .select()
           .single();
-        if (!error && data) {
-          this.settings = data;
+
+        // 2. Nếu DB chưa có cột bonus_tiers (lỗi PGRST204), update các trường chuẩn
+        if (updateRes.error && updateRes.error.code === 'PGRST204') {
+          const { bonus_tiers, ...standardSettings } = newSettings;
+          updateRes = await supabase
+            .from('point_settings')
+            .update({
+              ...standardSettings,
+              updated_at: new Date().toISOString(),
+              updated_by: 'ADMIN',
+            })
+            .eq('is_active', true)
+            .select()
+            .single();
+        }
+
+        if (!updateRes.error && updateRes.data) {
+          this.settings = {
+            ...this.settings,
+            ...updateRes.data,
+            bonus_tiers: updateRes.data.bonus_tiers || this.settings.bonus_tiers,
+          };
           this.saveToLocalStorage();
           activityLogService.logActivity(
             'SETTINGS_UPDATE',
             'POINT_SETTING',
-            data.id,
-            `Cập nhật cấu hình tích điểm: ${data.amount_per_point.toLocaleString('vi-VN')}đ = ${data.points_per_amount} điểm, hạn ${data.expiry_days} ngày`,
+            updateRes.data.id,
+            `Cập nhật cấu hình tích điểm: ${updateRes.data.amount_per_point.toLocaleString('vi-VN')}đ = ${updateRes.data.points_per_amount} điểm, hạn ${updateRes.data.expiry_days} ngày`,
             newSettings
           );
-          return data;
+          return { ...this.settings };
         }
       } catch (_) {}
     }
