@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { PlusCircle, Calculator, Calendar, X, Sparkles, User, Info } from 'lucide-react';
 import { loyaltyStore, DEFAULT_SETTING } from '@/lib/store/loyalty-store';
-import { calculatePoints, calculateExpiryDate, formatVND, formatDateOnly, isValidVietnamesePhone } from '@/lib/points-engine';
+import { calculatePoints, calculateBonusPoints, calculateExpiryDate, formatVND, formatDateOnly, isValidVietnamesePhone } from '@/lib/points-engine';
 import { PointSetting, Customer } from '@/types/database';
 import { useToast } from '@/components/ui/Toast';
 import confetti from 'canvas-confetti';
@@ -82,12 +82,14 @@ export function EarnPointsModal({
   const numK = typeof amountK === 'string' ? (amountK === '' ? 0 : Number(amountK)) : amountK;
   const amount = numK * 1000;
 
-  const pointsEarned = calculatePoints(
+  const basePoints = calculatePoints(
     amount,
     setting.amount_per_point,
     setting.points_per_amount,
     setting.rounding_mode
   );
+  const { bonusPoints, matchedTier } = calculateBonusPoints(amount, setting.bonus_tiers);
+  const pointsEarned = basePoints + bonusPoints;
   const expiryDate = calculateExpiryDate(setting.expiry_days);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -270,21 +272,52 @@ export function EarnPointsModal({
               </span>
             </div>
 
-            <div className="flex items-baseline justify-between pt-2 border-t border-emerald-100">
-              <div>
-                <span className="text-xs text-slate-500">Điểm nhận được:</span>
+            {/* Points breakdown */}
+            <div className="pt-2 border-t border-emerald-100 space-y-1.5">
+              {/* Base points row */}
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-slate-500">Điểm cơ bản:</span>
+                <span className="text-lg font-black text-emerald-700">+{basePoints} điểm</span>
+              </div>
+
+              {/* Bonus tier row — only show when amount qualifies */}
+              {matchedTier && bonusPoints > 0 && (
+                <div className="flex items-center justify-between px-2 py-1.5 rounded-xl bg-amber-50 border border-amber-200">
+                  <span className="text-xs font-semibold text-amber-800 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-500" />
+                    Thưởng mốc {matchedTier.label || formatVND(matchedTier.minAmount)}:
+                  </span>
+                  <span className="text-sm font-black text-amber-700">+{bonusPoints} điểm</span>
+                </div>
+              )}
+
+              {/* Next tier hint */}
+              {setting.bonus_tiers && setting.bonus_tiers.length > 0 && (() => {
+                const nextTier = [...setting.bonus_tiers]
+                  .sort((a, b) => a.minAmount - b.minAmount)
+                  .find(t => amount < t.minAmount);
+                return nextTier ? (
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    ↗ Chỉ cần thêm {formatVND(nextTier.minAmount - amount)} để đạt mốc thưởng +{nextTier.bonusPoints} điểm
+                  </p>
+                ) : null;
+              })()}
+
+              {/* Total divider */}
+              <div className="flex items-baseline justify-between pt-1.5 border-t border-emerald-200">
+                <span className="text-xs font-bold text-slate-700">Tổng điểm nhận:</span>
                 <div className="text-2xl font-black text-emerald-700 flex items-center gap-1">
-                  +{pointsEarned}{' '}
-                  <span className="text-sm font-bold text-emerald-600">điểm</span>
+                  +{pointsEarned} <span className="text-sm font-bold text-emerald-600">điểm</span>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="text-[11px] text-slate-500 block">Hạn sử dụng:</span>
-                <span className="text-xs font-bold text-slate-800 inline-flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-emerald-600" />
-                  {formatDateOnly(expiryDate.toISOString())} ({setting.expiry_days} ngày)
-                </span>
-              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-[11px] text-slate-500 block">Hạn sử dụng:</span>
+              <span className="text-xs font-bold text-slate-800 inline-flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-emerald-600" />
+                {formatDateOnly(expiryDate.toISOString())} ({setting.expiry_days} ngày)
+              </span>
             </div>
           </div>
 

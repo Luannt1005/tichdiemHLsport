@@ -29,7 +29,7 @@ export function RedeemPointsModal({
   const [phone, setPhone] = useState(initialPhone || initialCustomer?.phone || '');
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer || null);
   const [lots, setLots] = useState<PointLot[]>([]);
-  const [pointsToRedeem, setPointsToRedeem] = useState<number>(50);
+  const [pointsToRedeem, setPointsToRedeem] = useState<number | string>(50);
   const [description, setDescription] = useState('Khấu trừ thanh toán tiền sân');
   const [referenceType, setReferenceType] = useState('BOOKING');
   const [referenceId, setReferenceId] = useState('');
@@ -81,9 +81,14 @@ export function RedeemPointsModal({
   const currentBalance = customer?.total_points || 0;
   const activeLots = lots.filter((l) => l.status === 'ACTIVE' && l.remaining_points > 0);
 
+  // Parse giá trị hiển thị thành số thực để tính toán
+  const numPointsToRedeem = typeof pointsToRedeem === 'string'
+    ? (pointsToRedeem === '' ? 0 : Number(pointsToRedeem))
+    : pointsToRedeem;
+
   // Estimate FEFO allocation preview
   const previewAllocations: { lot: PointLot; deduct: number }[] = [];
-  let remainingNeed = pointsToRedeem;
+  let remainingNeed = numPointsToRedeem;
   for (const lot of activeLots) {
     if (remainingNeed <= 0) break;
     const deduct = Math.min(lot.remaining_points, remainingNeed);
@@ -94,13 +99,13 @@ export function RedeemPointsModal({
   const handleQuickPercent = (percent: number) => {
     if (!customer) return;
     const pts = Math.floor((currentBalance * percent) / 100);
-    setPointsToRedeem(Math.max(1, pts));
+    setPointsToRedeem(String(Math.max(1, pts)));
   };
 
   const handleConfirmRedeem = async () => {
     if (!customer) return;
-    if (pointsToRedeem <= 0 || pointsToRedeem > currentBalance) {
-      error('Số điểm không hợp lệ', 'Số điểm trừ phải lớn hơn 0 và không vượt quá số dư hiện có');
+    if (numPointsToRedeem <= 0 || numPointsToRedeem > currentBalance || !Number.isInteger(numPointsToRedeem)) {
+      error('Số điểm không hợp lệ', 'Số điểm trừ phải là số nguyên dương và không vượt quá số dư hiện có');
       return;
     }
 
@@ -108,7 +113,7 @@ export function RedeemPointsModal({
     try {
       const res = await loyaltyStore.redeemPoints({
         customerId: customer.id,
-        points: pointsToRedeem,
+        points: numPointsToRedeem,
         description,
         referenceType,
         referenceId: referenceId || undefined,
@@ -116,7 +121,7 @@ export function RedeemPointsModal({
 
       success(
         'Trừ điểm thành công!',
-        `Đã trừ ${pointsToRedeem} điểm của ${customer.name}. Số dư mới: ${res.newBalance} điểm.`
+        `Đã trừ ${numPointsToRedeem} điểm của ${customer.name}. Số dư mới: ${res.newBalance} điểm.`
       );
 
       if (onSuccess) onSuccess();
@@ -208,11 +213,15 @@ export function RedeemPointsModal({
                 </label>
                 <div className="relative">
                   <input
-                    type="number"
-                    min="1"
-                    max={currentBalance}
+                    type="text"
+                    inputMode="numeric"
                     value={pointsToRedeem}
-                    onChange={(e) => setPointsToRedeem(Math.min(currentBalance, Math.max(0, Number(e.target.value))))}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '');
+                      setPointsToRedeem(clean === '' ? '' : String(Math.min(currentBalance, Number(clean))));
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    placeholder="0"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-lg font-black text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white transition-all"
                   />
                   <span className="absolute right-3.5 top-3 text-xs font-bold text-slate-400">
@@ -225,7 +234,7 @@ export function RedeemPointsModal({
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
                   <span>Phân bổ trừ theo lô điểm (FEFO):</span>
-                  <span className="text-rose-600 font-black">-{pointsToRedeem} điểm</span>
+                  <span className="text-rose-600 font-black">-{numPointsToRedeem} điểm</span>
                 </div>
 
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
@@ -247,7 +256,7 @@ export function RedeemPointsModal({
 
                 <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
                   <span className="text-slate-500 font-medium">Số dư còn lại sau khi trừ:</span>
-                  <span className="font-bold text-slate-900">{currentBalance - pointsToRedeem} điểm</span>
+                  <span className="font-bold text-slate-900">{currentBalance - numPointsToRedeem} điểm</span>
                 </div>
               </div>
 
@@ -297,7 +306,7 @@ export function RedeemPointsModal({
                   <button
                     type="button"
                     onClick={() => setShowConfirm(true)}
-                    disabled={pointsToRedeem <= 0}
+                    disabled={numPointsToRedeem <= 0}
                     className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <span>Tiếp tục trừ điểm</span>

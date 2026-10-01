@@ -6,16 +6,12 @@ import { useRouter } from 'next/navigation';
 import {
   Lock,
   User,
-  ShieldCheck,
   ArrowRight,
-  Sparkles,
   AlertCircle,
   Eye,
   EyeOff,
-  UserCheck,
-  UserPlus,
 } from 'lucide-react';
-import { authStore, PRESET_USERS } from '@/lib/auth/auth-store';
+import { authStore } from '@/lib/auth/auth-store';
 import { activityLogService } from '@/lib/services/activity-log-service';
 import { useToast } from '@/components/ui/Toast';
 
@@ -88,38 +84,6 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Có lỗi xảy ra khi đăng nhập');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickLogin = async (type: 'ADMIN' | 'STAFF') => {
-    const target = PRESET_USERS.find((u) => u.role === type);
-    if (!target) return;
-
-    setUsername(target.username);
-    setPassword(target.password_hash);
-    setErrorMsg('');
-    setLoading(true);
-
-    try {
-      const res = await authStore.login(target.username, target.password_hash);
-      if (res.success && res.user) {
-        await activityLogService.logActivity(
-          'LOGIN',
-          'AUTH',
-          res.user.id,
-          `Đăng nhập nhanh thành công với vai trò ${res.user.role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'} (${res.user.name})`,
-          { role: res.user.role, username: res.user.username, type: 'QUICK_LOGIN' }
-        );
-
-        success('Đăng nhập thành công', `Đã đăng nhập với tư cách ${res.user.name}`);
-        router.push('/customers');
-      } else {
-        setErrorMsg(res.error || 'Lỗi đăng nhập nhanh');
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Lỗi hệ thống');
     } finally {
       setLoading(false);
     }
@@ -213,55 +177,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Quick Login Section */}
-        <div className="pt-4 border-t border-slate-100 space-y-2.5">
-          <div className="flex items-center gap-1.5 text-slate-500 text-xs font-bold justify-center">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Đăng nhập nhanh một chạm:</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('ADMIN')}
-              disabled={loading}
-              className="p-2.5 border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/60 rounded-xl text-left transition-all cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                <span className="text-xs font-bold text-emerald-900">Quản trị viên</span>
-              </div>
-              <span className="text-[11px] text-emerald-700 font-mono">admin</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('STAFF')}
-              disabled={loading}
-              className="p-2.5 border border-blue-200 bg-blue-50/60 hover:bg-blue-100/60 rounded-xl text-left transition-all cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <UserCheck className="w-4 h-4 text-blue-700" />
-                <span className="text-xs font-bold text-blue-900">Thu ngân</span>
-              </div>
-              <span className="text-[11px] text-blue-700 font-mono">nhanvien</span>
-            </button>
-          </div>
-        </div>
-
         {/* Links */}
         <div className="pt-2 flex flex-col gap-2 text-center text-xs font-semibold">
-          <Link
-            href="/register"
-            className="inline-flex items-center justify-center gap-1.5 p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 transition-all"
-          >
-            <UserPlus className="w-3.5 h-3.5 text-[#1B6C39]" />
-            <span>Chưa có tài khoản?</span>
-            <span className="text-[#1B6C39] font-bold underline decoration-emerald-400">
-              Tạo tài khoản mới
-            </span>
-          </Link>
-
           <Link
             href="/lookup"
             className="inline-flex items-center justify-center gap-1 text-slate-500 hover:text-slate-800 transition-colors pt-1"

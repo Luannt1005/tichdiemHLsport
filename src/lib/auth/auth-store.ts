@@ -264,13 +264,35 @@ class AuthStore {
     return { success: true };
   }
 
-  public async register(params: {
+  public async checkDatabaseUsersTable(): Promise<{ exists: boolean; error?: string }> {
+    try {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('id')
+        .limit(1);
+
+      if (error) {
+        if (error.code === 'PGRST205') {
+          return {
+            exists: false,
+            error: 'Bảng "app_users" chưa tồn tại trong cơ sở dữ liệu Supabase.',
+          };
+        }
+        return { exists: false, error: error.message };
+      }
+      return { exists: true };
+    } catch (e: any) {
+      return { exists: false, error: e?.message || 'Không thể kết nối Supabase' };
+    }
+  }
+
+  public async createUser(params: {
     username: string;
     name: string;
     email?: string;
     password: string;
     role?: UserRole;
-  }): Promise<{ success: boolean; user?: AppUser; error?: string }> {
+  }): Promise<{ success: boolean; user?: AppUser; error?: string; isDatabase?: boolean }> {
     const rawUsername = params.username.trim().toLowerCase();
     const rawName = params.name.trim();
     const rawEmail = params.email?.trim().toLowerCase() || null;
@@ -296,25 +318,42 @@ class AuthStore {
       return { success: false, error: 'Mật khẩu phải có tối thiểu 6 ký tự' };
     }
 
-    // 1. Kiểm tra trên Supabase
+    // 1. Kiểm tra bảng app_users trên Supabase
     try {
-      let query = supabase
+      const { data: existingUser, error: checkErr } = await supabase
         .from('app_users')
-        .select('id, username, email')
-        .or(`username.eq.${rawUsername}${rawEmail ? `,email.eq.${rawEmail}` : ''}`);
+        .select('id, username')
+        .eq('username', rawUsername)
+        .maybeSingle();
 
-      const { data: existingUsers, error: checkErr } = await query;
-      if (!checkErr && existingUsers && existingUsers.length > 0) {
-        const found = existingUsers[0];
-        if (found.username.toLowerCase() === rawUsername) {
-          return { success: false, error: `Tên đăng nhập '${rawUsername}' đã được sử dụng` };
+      if (checkErr) {
+        if (checkErr.code === 'PGRST205') {
+          return {
+            success: false,
+            error:
+              'Bảng "app_users" chưa được tạo trên Supabase Database. Vui lòng chạy mã trong file "supabase_auth_logs.sql" trong Supabase SQL Editor.',
+          };
         }
-        if (rawEmail && found.email?.toLowerCase() === rawEmail) {
+        return { success: false, error: `Lỗi kết nối Supabase: ${checkErr.message}` };
+      }
+
+      if (existingUser) {
+        return { success: false, error: `Tên đăng nhập '${rawUsername}' đã được sử dụng` };
+      }
+
+      if (rawEmail) {
+        const { data: existingEmail } = await supabase
+          .from('app_users')
+          .select('id, email')
+          .eq('email', rawEmail)
+          .maybeSingle();
+
+        if (existingEmail) {
           return { success: false, error: `Email '${rawEmail}' đã được sử dụng` };
         }
       }
 
-      // Thử insert vào Supabase
+      // 2. Thêm người dùng vào Supabase app_users
       const { data: created, error: insertErr } = await supabase
         .from('app_users')
         .insert({
@@ -324,12 +363,19 @@ class AuthStore {
           password_hash: rawPassword,
           role,
           is_active: true,
-          last_login_at: new Date().toISOString(),
+          last_login_at: null,
         })
         .select()
         .single();
 
-      if (!insertErr && created) {
+      if (insertErr) {
+        return {
+          success: false,
+          error: `Không thể lưu vào Supabase: ${insertErr.message} (mã: ${insertErr.code})`,
+        };
+      }
+
+      if (created) {
         const userObj: AppUser = {
           id: created.id,
           username: created.username,
@@ -341,57 +387,92 @@ class AuthStore {
           created_at: created.created_at,
         };
 
-        this.users.push({ ...userObj, password_hash: rawPassword });
+        // Đồng bộ vào cache danh sách nội bộ
+        this.users = this.users.filter((u) => u.id !== userObj.id && u.username !== userObj.username);
+        this.users.unshift({ ...userObj, password_hash: rawPassword });
         this.saveUsersToLocalStorage();
-        this.saveSession(userObj);
+
+        // KHÔNG gọi saveSession ở đây để không làm mất phiên đăng nhập của Admin
+        return { success: true, user: userObj, isDatabase: true };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        error: `Lỗi kết nối cơ sở dữ liệu: ${err?.message || 'Không thể liên lạc Supabase'}`,
+      };
+    }
+
+    return { success: false, error: 'Không thể tạo tài khoản người dùng' };
+  }
+
+  public async register(
+    params: {
+      username: string;
+      name: string;
+      email?: string;
+      password: string;
+      role?: UserRole;
+    },
+    autoLogin: boolean = true
+  ): Promise<{ success: boolean; user?: AppUser; error?: string }> {
+    const res = await this.createUser(params);
+    if (!res.success) {
+      // Nếu lỗi do bảng chưa tạo trên Supabase và đây là đăng ký tự do, fallback lưu local tạm
+      if (res.error?.includes('app_users') || res.error?.includes('PGRST205')) {
+        const rawUsername = params.username.trim().toLowerCase();
+        const rawName = params.name.trim();
+        const rawEmail = params.email?.trim().toLowerCase() || null;
+        const rawPassword = params.password.trim();
+        const role: UserRole = params.role || 'STAFF';
+
+        const existsLocal = this.users.find(
+          (u) =>
+            u.username.toLowerCase() === rawUsername ||
+            (rawEmail && u.email?.toLowerCase() === rawEmail)
+        );
+
+        if (existsLocal) {
+          return { success: false, error: `Tên đăng nhập hoặc email đã được sử dụng` };
+        }
+
+        const newUser: AppUser & { password_hash: string } = {
+          id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          username: rawUsername,
+          name: rawName,
+          email: rawEmail,
+          password_hash: rawPassword,
+          role,
+          is_active: true,
+          last_login_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        };
+
+        this.users.push(newUser);
+        this.saveUsersToLocalStorage();
+
+        const userObj: AppUser = {
+          id: newUser.id,
+          username: newUser.username,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          is_active: newUser.is_active,
+          last_login_at: newUser.last_login_at,
+          created_at: newUser.created_at,
+        };
+
+        if (autoLogin) {
+          this.saveSession(userObj);
+        }
         return { success: true, user: userObj };
       }
-    } catch (_) {
-      // Fallback local
+      return res;
     }
 
-    // 2. Kiểm tra trên local users
-    const existsLocal = this.users.find(
-      (u) =>
-        u.username.toLowerCase() === rawUsername ||
-        (rawEmail && u.email?.toLowerCase() === rawEmail)
-    );
-
-    if (existsLocal) {
-      if (existsLocal.username.toLowerCase() === rawUsername) {
-        return { success: false, error: `Tên đăng nhập '${rawUsername}' đã được sử dụng` };
-      }
-      return { success: false, error: `Email '${rawEmail}' đã được sử dụng` };
+    if (autoLogin && res.user) {
+      this.saveSession(res.user);
     }
-
-    const newUser: AppUser & { password_hash: string } = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      username: rawUsername,
-      name: rawName,
-      email: rawEmail,
-      password_hash: rawPassword,
-      role,
-      is_active: true,
-      last_login_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    };
-
-    this.users.push(newUser);
-    this.saveUsersToLocalStorage();
-
-    const userObj: AppUser = {
-      id: newUser.id,
-      username: newUser.username,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      is_active: newUser.is_active,
-      last_login_at: newUser.last_login_at,
-      created_at: newUser.created_at,
-    };
-
-    this.saveSession(userObj);
-    return { success: true, user: userObj };
+    return res;
   }
 
   public async getUsers(): Promise<AppUser[]> {
@@ -402,7 +483,7 @@ class AuthStore {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         // Sync to local memory
         const list: AppUser[] = data.map((u) => ({
           id: u.id,

@@ -25,6 +25,9 @@ import {
   ArrowRight,
   Shield,
   UserCheck,
+  Database,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { AppUser, UserRole } from '@/types/database';
 import { authStore } from '@/lib/auth/auth-store';
@@ -62,6 +65,10 @@ export default function AdminManagementPage() {
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
 
+  // Database Connection State for app_users table
+  const [dbConnected, setDbConnected] = useState<boolean | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
+
   // 1. Check current authenticated user and RBAC
   useEffect(() => {
     const user = authStore.getCurrentUser();
@@ -72,7 +79,18 @@ export default function AdminManagementPage() {
     return () => unsub();
   }, []);
 
-  // 2. Fetch users list
+  // 2. Check Supabase DB status and load users
+  const checkDbStatus = useCallback(async () => {
+    try {
+      const res = await authStore.checkDatabaseUsersTable();
+      setDbConnected(res.exists);
+      return res.exists;
+    } catch {
+      setDbConnected(false);
+      return false;
+    }
+  }, []);
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
@@ -87,9 +105,83 @@ export default function AdminManagementPage() {
 
   useEffect(() => {
     if (currentUser?.role === 'ADMIN') {
+      checkDbStatus();
       loadUsers();
     }
-  }, [currentUser, loadUsers]);
+  }, [currentUser, checkDbStatus, loadUsers]);
+
+  const handleCopySql = async () => {
+    const sql = `-- ==============================================================================
+-- HL SPORT LOYALTY SYSTEM - AUTHENTICATION & ACTIVITY LOGS SCHEMA
+-- ==============================================================================
+
+-- 1. BẢNG TÀI KHOẢN NGƯỜI DÙNG (APP USERS)
+CREATE TABLE IF NOT EXISTS public.app_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'STAFF' CHECK (role IN ('ADMIN', 'STAFF')),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_users_username ON public.app_users(username);
+CREATE INDEX IF NOT EXISTS idx_app_users_role ON public.app_users(role);
+
+-- 2. BẢNG NHẬT KÝ HOẠT ĐỘNG (ACTIVITY LOGS / AUDIT TRAIL)
+CREATE TABLE IF NOT EXISTS public.activity_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR(100),
+    username VARCHAR(100) NOT NULL,
+    user_role VARCHAR(20) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id VARCHAR(100),
+    description TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON public.activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_username ON public.activity_logs(username);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON public.activity_logs(action);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_entity ON public.activity_logs(entity_type, entity_id);
+
+-- 3. KÍCH HOẠT ROW LEVEL SECURITY (RLS) & CHÍNH SÁCH TRUY CẬP
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public full access to app_users" ON public.app_users;
+CREATE POLICY "Public full access to app_users" ON public.app_users FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public full access to activity_logs" ON public.activity_logs;
+CREATE POLICY "Public full access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. THÊM TÀI KHOẢN ADMIN VÀ THU NGÂN ĐỊNH SẴN NẾU CHƯA CÓ
+INSERT INTO public.app_users (username, email, name, password_hash, role, is_active)
+VALUES 
+    ('admin', 'admin@hlsport.vn', 'Quản trị viên HL Sport', 'admin123', 'ADMIN', true),
+    ('nhanvien', 'nhanvien@hlsport.vn', 'Thu ngân HL Sport', 'staff123', 'STAFF', true)
+ON CONFLICT (username) DO UPDATE 
+SET name = EXCLUDED.name,
+    password_hash = EXCLUDED.password_hash,
+    role = EXCLUDED.role,
+    is_active = EXCLUDED.is_active;
+`;
+
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopiedSql(true);
+      success('Đã sao chép mã SQL!', 'Dán vào SQL Editor trên Supabase Dashboard và bấm Run');
+      setTimeout(() => setCopiedSql(false), 3000);
+    } catch {
+      toastError('Không thể sao chép', 'Vui lòng mở file supabase_auth_logs.sql trong dự án để copy');
+    }
+  };
 
   // RBAC ACCESS DENIED SCREEN
   if (!currentUser || currentUser.role !== 'ADMIN') {
@@ -222,7 +314,7 @@ export default function AdminManagementPage() {
 
     setModalLoading(true);
     try {
-      const res = await authStore.register({
+      const res = await authStore.createUser({
         name: newName,
         username: newUsername,
         email: newEmail || undefined,
@@ -236,10 +328,15 @@ export default function AdminManagementPage() {
           'AUTH',
           res.user.id,
           `Quản trị viên tạo tài khoản mới: ${res.user.name} (@${res.user.username}) với vai trò ${res.user.role}`,
-          { targetUsername: res.user.username, role: res.user.role }
+          { targetUsername: res.user.username, role: res.user.role, isDatabase: res.isDatabase }
         );
 
-        success('Tạo tài khoản thành công', `Đã thêm tài khoản ${res.user.name} vào hệ thống`);
+        if (res.isDatabase) {
+          success('Tạo tài khoản thành công', `Đã lưu tài khoản ${res.user.name} vào Database Supabase`);
+        } else {
+          success('Tạo tài khoản thành công', `Đã thêm tài khoản ${res.user.name} vào hệ thống`);
+        }
+
         setShowCreateModal(false);
         setNewName('');
         setNewUsername('');
@@ -247,6 +344,7 @@ export default function AdminManagementPage() {
         setNewPassword('');
         setNewRole('STAFF');
         loadUsers();
+        checkDbStatus();
       } else {
         setModalError(res.error || 'Không thể tạo tài khoản');
       }
@@ -341,6 +439,62 @@ export default function AdminManagementPage() {
 
   return (
     <div className="space-y-4">
+      {/* Database Warning Banner when app_users table does not exist */}
+      {dbConnected === false && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 shadow-xs space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0 mt-0.5">
+              <Database className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-amber-900">
+                  Chưa tạo bảng &quot;app_users&quot; trên Supabase Database
+                </h3>
+                <span className="px-2 py-0.5 bg-amber-200/80 text-amber-900 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                  Cần khởi tạo
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                Tài khoản tạo ra hiện chỉ đang lưu tạm trên trình duyệt này vì cơ sở dữ liệu Supabase chưa được khởi tạo bảng <code className="px-1.5 py-0.5 bg-amber-100 rounded font-mono font-bold text-amber-900">app_users</code>. Để lưu vĩnh viễn vào Database và dùng được trên mọi máy tính/điện thoại, bạn chỉ cần copy mã SQL và dán vào Supabase SQL Editor.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-200/60">
+            <button
+              type="button"
+              onClick={handleCopySql}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              {copiedSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedSql ? 'Đã sao chép mã SQL!' : 'Sao chép mã SQL (supabase_auth_logs.sql)'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                info('Đang kiểm tra', 'Đang kết nối lại Supabase...');
+                const ok = await checkDbStatus();
+                if (ok) {
+                  success('Kết nối thành công!', 'Bảng app_users đã sẵn sàng trên Supabase');
+                } else {
+                  toastError('Chưa phát hiện bảng', 'Vui lòng đảm bảo đã chạy mã SQL trên Supabase Dashboard và bấm Run');
+                }
+              }}
+              className="px-3.5 py-2 bg-white hover:bg-amber-100/60 border border-amber-300 text-amber-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4 text-amber-600" />
+              <span>Kiểm tra lại kết nối</span>
+            </button>
+
+            <span className="text-[11px] text-amber-700">
+              👉 Mở <strong>Supabase Dashboard</strong> → Chọn <strong>SQL Editor</strong> → Dán và ấn <strong>Run</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar: Search, Filters & Add Button */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center gap-3">
         {/* Search */}
@@ -598,6 +752,15 @@ export default function AdminManagementPage() {
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-700 text-xs font-semibold">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>{modalError}</div>
+                </div>
+              )}
+
+              {dbConnected === false && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <span className="font-bold">Lưu ý Database:</span> Bảng <code>app_users</code> chưa có trên Supabase. Bạn cần chạy mã SQL trong file <code>supabase_auth_logs.sql</code> trên Supabase để lưu tài khoản vào Database.
+                  </div>
                 </div>
               )}
 

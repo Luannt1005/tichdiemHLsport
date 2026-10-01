@@ -4,6 +4,18 @@ export type RoundingMode = 'FLOOR' | 'ROUND' | 'CEIL';
 export type CustomerStatus = 'ACTIVE' | 'INACTIVE';
 export type UserRole = 'ADMIN' | 'STAFF';
 
+/**
+ * Mốc thưởng điểm theo giá trị hóa đơn.
+ * Ví dụ: hóa đơn >= 1.000.000đ → +50 bonus điểm.
+ * Logic: Áp dụng mốc CAO NHẤT mà amount đạt được.
+ */
+export interface BonusTier {
+  id: string;           // UUID hoặc random string
+  minAmount: number;    // Ngưỡng hóa đơn tối thiểu (đVNĐ)
+  bonusPoints: number;  // Số điểm thưởng thêm
+  label?: string;       // Nhãn hiển thị (tùy chọn)
+}
+
 export type ActivityAction = 
   | 'LOGIN'
   | 'LOGOUT'
@@ -71,6 +83,8 @@ export interface PointSetting {
   updated_by: string;
   created_at: string;
   updated_at: string;
+  /** Mốc thưởng điểm theo giá trị hóa đơn (lưu local, chưa đồng bộ DB) */
+  bonus_tiers?: BonusTier[];
 }
 
 export interface PointTransaction {

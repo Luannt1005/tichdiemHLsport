@@ -2,20 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Settings,
   Save,
   Calculator,
   Calendar,
   ShieldCheck,
   AlertTriangle,
   Info,
-  CheckCircle2,
+  Gift,
+  Plus,
+  Trash2,
   Database,
   Copy,
   Check,
 } from 'lucide-react';
 import { loyaltyStore, DEFAULT_SETTING } from '@/lib/store/loyalty-store';
-import { PointSetting, RoundingMode, UserRole } from '@/types/database';
+import { authStore } from '@/lib/auth/auth-store';
+import { PointSetting, RoundingMode, UserRole, BonusTier } from '@/types/database';
 import { calculatePoints, formatVND } from '@/lib/points-engine';
 import { useToast } from '@/components/ui/Toast';
 
@@ -26,12 +28,26 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
+  // Bonus tier form state
+  const [newTierAmount, setNewTierAmount] = useState<string>('');
+  const [newTierPoints, setNewTierPoints] = useState<string>('');
+  const [newTierLabel, setNewTierLabel] = useState<string>('');
+
   // Sandbox simulation test values
   const [testAmount, setTestAmount] = useState<number>(75000);
 
   useEffect(() => {
     loyaltyStore.getPointSettings().then(setSetting);
-    setRole(loyaltyStore.getRole());
+
+    // Lấy role từ authStore (đồng bộ với session đăng nhập thực tế)
+    const currentUser = authStore.getCurrentUser();
+    if (currentUser) setRole(currentUser.role);
+
+    // Reactive: cập nhật role khi user đăng nhập/đăng xuất
+    const unsub = authStore.subscribe((user) => {
+      setRole(user ? user.role : 'STAFF');
+    });
+    return () => unsub();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -120,14 +136,20 @@ export default function SettingsPage() {
                 Số tiền thanh toán mỗi đơn vị điểm (VNĐ) <span className="text-rose-500">*</span>
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 step="1000"
                 min="1000"
                 disabled={role !== 'ADMIN'}
                 value={setting.amount_per_point}
-                onChange={(e) =>
-                  setSetting({ ...setting, amount_per_point: Math.max(1000, Number(e.target.value)) })
-                }
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/\D/g, '');
+                  setSetting({ ...setting, amount_per_point: clean === '' ? 0 : Number(clean) });
+                }}
+                onBlur={(e) => {
+                  const val = Number(e.target.value.replace(/\D/g, ''));
+                  if (!val || val < 1000) setSetting({ ...setting, amount_per_point: 1000 });
+                }}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
@@ -140,13 +162,19 @@ export default function SettingsPage() {
                 Số điểm nhận được tương ứng <span className="text-rose-500">*</span>
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 min="1"
                 disabled={role !== 'ADMIN'}
                 value={setting.points_per_amount}
-                onChange={(e) =>
-                  setSetting({ ...setting, points_per_amount: Math.max(1, Number(e.target.value)) })
-                }
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/\D/g, '');
+                  setSetting({ ...setting, points_per_amount: clean === '' ? 0 : Number(clean) });
+                }}
+                onBlur={(e) => {
+                  const val = Number(e.target.value.replace(/\D/g, ''));
+                  if (!val || val < 1) setSetting({ ...setting, points_per_amount: 1 });
+                }}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
@@ -334,6 +362,162 @@ export default function SettingsPage() {
               Khi bạn thay đổi thời hạn sang {setting.expiry_days} ngày, các điểm đã tích trước đây vẫn giữ nguyên ngày hết hạn ban đầu để đảm bảo quyền lợi cho khách hàng.
             </p>
           </div>
+        </div>
+
+        {/* Section 4: Mốc Thưởng Điểm */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-amber-600" />
+              <h3 className="text-base font-bold text-slate-900">Điểm Thưởng Theo Mốc Hóa Đơn</h3>
+            </div>
+            <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+              Tùy chọn
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Thưởng thêm điểm khi khách đạt mốc hóa đơn nhất định. 
+            <strong>Chỉ áp dụng 1 mốc cao nhất phù hợp</strong>, không cộng dồn.
+          </p>
+
+          {/* Tiers Table */}
+          <div className="space-y-2">
+            {/* Header */}
+            <div className="grid grid-cols-12 gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+              <span className="col-span-5">Mốc hóa đơn từ</span>
+              <span className="col-span-3">Điểm thưởng</span>
+              <span className="col-span-3">Nhãn</span>
+              <span className="col-span-1"></span>
+            </div>
+
+            {/* Existing tiers */}
+            {(setting.bonus_tiers || []).length === 0 && (
+              <div className="py-6 text-center text-slate-400 text-xs">
+                <Gift className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p>Chưa có mốc thưởng nào. Thêm mốc bên dưới.</p>
+              </div>
+            )}
+
+            {[...(setting.bonus_tiers || [])]
+              .sort((a, b) => a.minAmount - b.minAmount)
+              .map((tier) => (
+              <div
+                key={tier.id}
+                className="grid grid-cols-12 gap-2 items-center bg-amber-50/60 border border-amber-100 rounded-xl px-3 py-2.5"
+              >
+                <div className="col-span-5 text-sm font-black text-amber-900">
+                  {formatVND(tier.minAmount)}
+                </div>
+                <div className="col-span-3">
+                  <span className="inline-flex items-center gap-1 text-sm font-black text-emerald-700">
+                    +{tier.bonusPoints} đ
+                  </span>
+                </div>
+                <div className="col-span-3 text-xs text-slate-500 font-medium truncate">
+                  {tier.label || '—'}
+                </div>
+                {role === 'ADMIN' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = (setting.bonus_tiers || []).filter(t => t.id !== tier.id);
+                      setSetting({ ...setting, bonus_tiers: updated });
+                    }}
+                    className="col-span-1 flex justify-center p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add new tier form */}
+          {role === 'ADMIN' && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <span className="text-xs font-bold text-slate-700">+ Thêm mốc thưởng mới</span>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                    Mốc hóa đơn (VNĐ)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="VD: 1000000"
+                    value={newTierAmount}
+                    onChange={(e) => setNewTierAmount(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  {newTierAmount && (
+                    <span className="text-[10px] text-amber-600 font-medium">
+                      = {formatVND(Number(newTierAmount))}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                    Điểm thưởng thêm
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="VD: 50"
+                    value={newTierPoints}
+                    onChange={(e) => setNewTierPoints(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                    Nhãn (tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Mốc 1 triệu"
+                    value={newTierLabel}
+                    onChange={(e) => setNewTierLabel(e.target.value)}
+                    className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const amt = Number(newTierAmount);
+                  const pts = Number(newTierPoints);
+                  if (!amt || amt < 1000) {
+                    error('Mốc không hợp lệ', 'Vui lòng nhập mốc hóa đơn tối thiểu 1.000đ');
+                    return;
+                  }
+                  if (!pts || pts < 1) {
+                    error('Điểm không hợp lệ', 'Số điểm thưởng phải ≥ 1');
+                    return;
+                  }
+                  const existing = setting.bonus_tiers || [];
+                  if (existing.some(t => t.minAmount === amt)) {
+                    error('Mốc trùng lập', `Đã có mốc ${formatVND(amt)} rồi`);
+                    return;
+                  }
+                  const newTier: BonusTier = {
+                    id: 'bt-' + Math.random().toString(36).substring(2, 7),
+                    minAmount: amt,
+                    bonusPoints: pts,
+                    label: newTierLabel.trim() || undefined,
+                  };
+                  setSetting({ ...setting, bonus_tiers: [...existing, newTier] });
+                  setNewTierAmount('');
+                  setNewTierPoints('');
+                  setNewTierLabel('');
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Thêm mốc
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Submit */}

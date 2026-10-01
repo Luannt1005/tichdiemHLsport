@@ -10,7 +10,7 @@ import {
   ChartDataPoint,
   UserRole,
 } from '@/types/database';
-import { calculatePoints, calculateExpiryDate, getDaysUntilExpiry } from '@/lib/points-engine';
+import { calculatePoints, calculateBonusPoints, calculateExpiryDate, getDaysUntilExpiry } from '@/lib/points-engine';
 
 // Initial default settings
 export const DEFAULT_SETTING: PointSetting = {
@@ -23,6 +23,11 @@ export const DEFAULT_SETTING: PointSetting = {
   updated_by: 'HỆ THỐNG',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  bonus_tiers: [
+    { id: 'bt-01', minAmount: 1000000,  bonusPoints: 50,  label: 'Mốc 1 triệu' },
+    { id: 'bt-02', minAmount: 2000000,  bonusPoints: 150, label: 'Mốc 2 triệu' },
+    { id: 'bt-03', minAmount: 5000000,  bonusPoints: 500, label: 'Mốc 5 triệu' },
+  ],
 };
 
 // Seed 10 Customers with detailed point lots & transactions for instant testing
@@ -1272,13 +1277,20 @@ class LoyaltyStore {
       return { customer: customer || this.customers[0], transaction, lot, pointsEarned: data.points_earned };
     }
 
-    // 1. Calculate points by current settings
-    const pointsEarned = calculatePoints(
+    // 1. Calculate base points by current settings
+    const basePoints = calculatePoints(
       params.amount,
       this.settings.amount_per_point,
       this.settings.points_per_amount,
       this.settings.rounding_mode
     );
+
+    // 1b. Calculate bonus points from milestone tiers
+    const { bonusPoints, matchedTier } = calculateBonusPoints(
+      params.amount,
+      this.settings.bonus_tiers
+    );
+    const pointsEarned = basePoints + bonusPoints;
 
     // 2. Expiry date computed at EARN time from current settings
     const expiresAt = calculateExpiryDate(this.settings.expiry_days).toISOString();
@@ -1300,6 +1312,9 @@ class LoyaltyStore {
     const now = new Date().toISOString();
 
     // 4. Create Transaction
+    const bonusDesc = matchedTier
+      ? ` + Điểm thưởng mốc ${matchedTier.label || (matchedTier.minAmount / 1000000).toFixed(0) + 'tr'} (+${bonusPoints}đ)` 
+      : '';
     const transaction: PointTransaction = {
       id: txId,
       customer_id: customer.id,
@@ -1310,7 +1325,7 @@ class LoyaltyStore {
       amount: params.amount,
       reference_type: params.referenceType || 'BOOKING',
       reference_id: params.referenceId || `BK-${Math.floor(100 + Math.random() * 900)}`,
-      description: params.description || 'Tích điểm thanh toán tiền sân',
+      description: (params.description || 'Tích điểm thanh toán tiền sân') + bonusDesc,
       created_by: params.createdBy || (this.currentRole === 'ADMIN' ? 'ADMIN' : 'STAFF'),
       created_at: now,
     };
@@ -1345,8 +1360,8 @@ class LoyaltyStore {
       'POINTS_EARN',
       'POINT_TRANSACTION',
       transaction.id,
-      `Tích +${pointsEarned.toLocaleString('vi-VN')} điểm cho khách hàng ${customer.name} (SĐT: ${customer.phone}) từ hóa đơn ${params.amount.toLocaleString('vi-VN')}đ`,
-      { phone: customer.phone, name: customer.name, points: pointsEarned, amount: params.amount, transactionId: transaction.id }
+      `Tích +${pointsEarned.toLocaleString('vi-VN')} điểm cho khách hàng ${customer.name} (SĐT: ${customer.phone}) từ hóa đơn ${params.amount.toLocaleString('vi-VN')}đ${matchedTier ? ` (bao gồm ${bonusPoints} điểm thưởng mốc)` : ''}`,
+      { phone: customer.phone, name: customer.name, points: pointsEarned, basePoints, bonusPoints, amount: params.amount, transactionId: transaction.id }
     );
 
     return { customer: { ...customer }, transaction, lot, pointsEarned };

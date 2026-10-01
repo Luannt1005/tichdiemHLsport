@@ -1,4 +1,4 @@
-import { RoundingMode } from '@/types/database';
+import { RoundingMode, BonusTier } from '@/types/database';
 
 /**
  * Calculates loyalty points earned from payment amount based on setting rules
@@ -29,6 +29,30 @@ export function calculatePoints(
 
   return Math.max(1, points);
 }
+
+/**
+ * Tìm bonus points cho mốc hóa đơn cao nhất mà amount đạt được.
+ * Logic: KHÔNG cộng dồn — chỉ áp dụng 1 mốc cao nhất phù hợp.
+ * VD: tiers=[{1tr:50}, {2tr:150}], amount=2.5tr → bonus=150 (mốc 2tr)
+ */
+export function calculateBonusPoints(amount: number, tiers?: BonusTier[]): {
+  bonusPoints: number;
+  matchedTier: BonusTier | null;
+} {
+  if (!tiers || tiers.length === 0 || amount <= 0) {
+    return { bonusPoints: 0, matchedTier: null };
+  }
+
+  // Sắp xếp giảm dần theo minAmount → tìm mốc cao nhất đạt được
+  const sorted = [...tiers].sort((a, b) => b.minAmount - a.minAmount);
+  const matched = sorted.find((t) => amount >= t.minAmount) || null;
+
+  return {
+    bonusPoints: matched ? matched.bonusPoints : 0,
+    matchedTier: matched,
+  };
+}
+
 
 /**
  * Calculate expiry date from today + days
