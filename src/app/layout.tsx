@@ -9,9 +9,9 @@ export const metadata: Metadata = {
   title: 'Hệ thống Tích Điểm Sân Cầu Lông - HL Sport',
   description: 'Quản lý tích điểm thành viên, FEFO Point Lots Ledger, và ưu đãi tiền sân cầu lông',
   icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
+    icon: '/victorlogo.png',
+    shortcut: '/victorlogo.png',
+    apple: '/victorlogo.png',
   },
 };
 

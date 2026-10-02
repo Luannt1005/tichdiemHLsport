@@ -6,8 +6,8 @@ interface BrandLogoProps {
   alt?: string;
 }
 
-export function BrandLogo({ className = 'w-6 h-6', variant = 'white', alt = 'HL Sport Logo' }: BrandLogoProps) {
-  const src = variant === 'white' ? '/logo-white.png' : '/logo.png';
+export function BrandLogo({ className = 'w-6 h-6', variant = 'white', alt = 'Victor Badminton Logo' }: BrandLogoProps) {
+  const src = variant === 'white' ? '/victorlogo-white.png' : '/victorlogo.png';
   return (
     <img
       src={src}
