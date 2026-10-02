@@ -20,30 +20,7 @@ import { authStore } from '@/lib/auth/auth-store';
 import { activityLogService } from '@/lib/services/activity-log-service';
 import { UserRole } from '@/types/database';
 import { useToast } from '@/components/ui/Toast';
-
-// Badminton Shuttlecock SVG Icon
-function ShuttlecockIcon({ className = 'w-7 h-7' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M9.5 17.5a2.5 2.5 0 0 0 5 0l-.5-2.5h-4l-.5 2.5z" fill="currentColor" />
-      <path d="M7 12h10" />
-      <path d="M5.5 8h13" />
-      <path d="M4 4l4 11" />
-      <path d="M20 4l-4 11" />
-      <path d="M9 4.5l1 10.5" />
-      <path d="M15 4.5l-1 10.5" />
-      <path d="M12 4v11" />
-    </svg>
-  );
-}
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -126,8 +103,8 @@ export default function RegisterPage() {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-5">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center">
-          <div className="w-14 h-14 rounded-2xl bg-[#1B6C39] text-white flex items-center justify-center shadow-sm mb-3">
-            <ShuttlecockIcon className="w-7 h-7" />
+          <div className="w-14 h-14 rounded-2xl bg-[#1B6C39] p-2.5 flex items-center justify-center shadow-sm mb-3">
+            <BrandLogo className="w-full h-full" variant="white" />
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900">
             Tạo Tài Khoản Mới

@@ -11,37 +11,13 @@ import {
   Gift,
   CheckCircle2,
   HelpCircle,
-  LogIn,
   AlertCircle,
   Sparkles,
   Coins,
   Wallet,
 } from 'lucide-react';
 import { Customer, PointLot, PointTransaction } from '@/types/database';
-
-// Badminton Shuttlecock Icon
-function ShuttlecockIcon({ className = 'w-6 h-6' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M9.5 17.5a2.5 2.5 0 0 0 5 0l-.5-2.5h-4l-.5 2.5z" fill="currentColor" />
-      <path d="M7 12h10" />
-      <path d="M5.5 8h13" />
-      <path d="M4 4l4 11" />
-      <path d="M20 4l-4 11" />
-      <path d="M9 4.5l1 10.5" />
-      <path d="M15 4.5l-1 10.5" />
-      <path d="M12 4v11" />
-    </svg>
-  );
-}
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface LookupData {
   customer: Customer;
@@ -143,8 +119,8 @@ export default function CustomerLookupPage() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link href="/lookup" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-xl bg-[#1B6C39] text-white flex items-center justify-center shadow-sm">
-              <ShuttlecockIcon className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-[#1B6C39] p-2 flex items-center justify-center shadow-sm">
+              <BrandLogo className="w-full h-full" variant="white" />
             </div>
             <div>
               <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight block leading-tight">
@@ -154,14 +130,6 @@ export default function CustomerLookupPage() {
                 Tra cứu điểm tích lũy
               </p>
             </div>
-          </Link>
-
-          <Link
-            href="/login"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-xs font-semibold transition-all shadow-2xs"
-          >
-            <LogIn className="w-3.5 h-3.5 text-slate-500" />
-            <span>Thu ngân</span>
           </Link>
         </div>
       </header>
@@ -272,17 +240,11 @@ export default function CustomerLookupPage() {
                 </div>
 
                 {/* Card Footer: Summary Stats */}
-                <div className="pt-3 border-t border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-emerald-100">
+                <div className="pt-3 border-t border-white/15 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-emerald-100">
                   <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
                     <span className="text-[11px] text-emerald-200 font-medium">Số tiền đã thanh toán:</span>
                     <strong className="text-white text-sm sm:text-base font-bold">
                       {(data.total_amount_paid || 0).toLocaleString('vi-VN')} đ
-                    </strong>
-                  </div>
-                  <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
-                    <span className="text-[11px] text-emerald-200 font-medium">Tổng điểm đã tích:</span>
-                    <strong className="text-white text-sm sm:text-base font-bold">
-                      {(data.customer.lifetime_points_earned || 0).toLocaleString('vi-VN')} điểm
                     </strong>
                   </div>
                   <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">

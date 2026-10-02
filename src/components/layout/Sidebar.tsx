@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { authStore } from '@/lib/auth/auth-store';
 import { AppUser } from '@/types/database';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface NavItem {
   title: string;
@@ -61,34 +62,7 @@ const navItems: NavItem[] = [
   },
 ];
 
-// Custom Badminton Shuttlecock SVG Icon
-function ShuttlecockIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      {/* Shuttlecock cork base */}
-      <path d="M9.5 17.5a2.5 2.5 0 0 0 5 0l-.5-2.5h-4l-.5 2.5z" fill="currentColor" />
-      {/* Lower connecting band */}
-      <path d="M7 12h10" />
-      {/* Upper connecting band */}
-      <path d="M5.5 8h13" />
-      {/* Outer feathers */}
-      <path d="M4 4l4 11" />
-      <path d="M20 4l-4 11" />
-      {/* Inner feather ribs */}
-      <path d="M9 4.5l1 10.5" />
-      <path d="M15 4.5l-1 10.5" />
-      <path d="M12 4v11" />
-    </svg>
-  );
-}
+
 
 export function Sidebar({
   mobileOpen,
@@ -135,8 +109,8 @@ export function Sidebar({
         {/* Brand Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-[#15592e]">
           <Link href="/" className="flex items-center gap-3 overflow-hidden">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white text-[#1B6C39] shadow-md shrink-0">
-              <ShuttlecockIcon className="w-6 h-6" />
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white p-2 shadow-md shrink-0">
+              <BrandLogo className="w-full h-full" variant="dark" />
             </div>
             {!collapsed && (
               <span className="font-black text-lg tracking-tight text-white truncate">

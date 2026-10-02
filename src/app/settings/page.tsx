@@ -7,19 +7,15 @@ import {
   Calendar,
   ShieldCheck,
   AlertTriangle,
-  Info,
   Gift,
   Coins,
   Plus,
   Trash2,
-  Database,
-  Copy,
-  Check,
 } from 'lucide-react';
 import { loyaltyStore, DEFAULT_SETTING } from '@/lib/store/loyalty-store';
 import { authStore } from '@/lib/auth/auth-store';
-import { PointSetting, RoundingMode, UserRole, BonusTier } from '@/types/database';
-import { calculatePoints, formatVND } from '@/lib/points-engine';
+import { PointSetting, UserRole, BonusTier } from '@/types/database';
+import { formatVND } from '@/lib/points-engine';
 import { useToast } from '@/components/ui/Toast';
 
 export default function SettingsPage() {
@@ -27,15 +23,10 @@ export default function SettingsPage() {
   const [setting, setSetting] = useState<PointSetting>(DEFAULT_SETTING);
   const [role, setRole] = useState<UserRole>('ADMIN');
   const [loading, setLoading] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
-
   // Bonus tier form state
   const [newTierAmount, setNewTierAmount] = useState<string>('');
   const [newTierPoints, setNewTierPoints] = useState<string>('');
   const [newTierLabel, setNewTierLabel] = useState<string>('');
-
-  // Sandbox simulation test values
-  const [testAmount, setTestAmount] = useState<number>(75000);
 
   useEffect(() => {
     loyaltyStore.getPointSettings().then(setSetting);
@@ -78,20 +69,6 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Live sandbox calculation (luôn làm tròn xuống FLOOR)
-  const currentResult = Math.floor(
-    (testAmount / (setting.amount_per_point || 10000)) * (setting.points_per_amount || 1)
-  );
-  const currentCashResult = currentResult * (setting.cash_per_point || 1000);
-
-  const handleCopySchemaSql = () => {
-    const sqlScript = `-- HƯỚNG DẪN: Mở Supabase Dashboard -> Vào Project dzemhqkvccmpoaumoytf -> Chọn SQL Editor -> Dán toàn bộ file supabase_schema.sql và supabase_seed.sql trong thư mục gốc rồi nhấn Run.`;
-    navigator.clipboard.writeText(sqlScript);
-    setCopiedSql(true);
-    info('Đã sao chép hướng dẫn SQL', 'File supabase_schema.sql nằm ngay trong thư mục gốc dự án của bạn!');
-    setTimeout(() => setCopiedSql(false), 3000);
   };
 
   return (
@@ -181,35 +158,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Quick preset options */}
-          {role === 'ADMIN' && (
-            <div className="pt-2">
-              <span className="text-xs text-slate-500 font-medium">Tùy chọn nhanh thường dùng:</span>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                {[
-                  { amount: 10000, points: 1, label: '10.000đ = 1 điểm (Chuẩn)' },
-                  { amount: 20000, points: 1, label: '20.000đ = 1 điểm' },
-                  { amount: 50000, points: 5, label: '50.000đ = 5 điểm' },
-                  { amount: 100000, points: 10, label: '100.000đ = 10 điểm' },
-                ].map((opt, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() =>
-                      setSetting({
-                        ...setting,
-                        amount_per_point: opt.amount,
-                        points_per_amount: opt.points,
-                      })
-                    }
-                    className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Section 2: Quy đổi điểm thưởng ra tiền mặt */}
@@ -219,11 +167,7 @@ export default function SettingsPage() {
             <h3 className="text-base font-bold text-slate-900">Quy Đổi Điểm Thưởng → Giá Trị Tiền Mặt</h3>
           </div>
 
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Quy định giá trị tiền mặt tương ứng của mỗi điểm khi khách hàng tra cứu hoặc dùng điểm để khấu trừ tiền hóa đơn.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                 Giá trị tiền mặt của 1 điểm (VNĐ / Điểm) <span className="text-rose-500">*</span>
@@ -248,84 +192,10 @@ export default function SettingsPage() {
                   VNĐ
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Ví dụ: 1.000 VNĐ = 1 điểm có giá trị khấu trừ tương đương 1.000đ tiền mặt khi thanh toán.
-              </p>
             </div>
 
-            <div className="p-4 bg-amber-50/60 border border-amber-200/80 rounded-2xl flex flex-col justify-between">
-              <div>
-                <span className="text-xs font-bold text-amber-900 block mb-1">
-                  💡 Quy tắc tích điểm & Làm tròn
-                </span>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  Quy tắc làm tròn điểm được cố định theo chuẩn <strong>Làm tròn xuống (FLOOR)</strong> để đảm bảo sự minh bạch và đồng nhất cho toàn hệ thống.
-                </p>
-              </div>
-              <div className="mt-2 pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs text-amber-950 font-semibold">
-                <span>Trực quan 100 điểm:</span>
-                <span className="font-bold text-amber-700">
-                  = {formatVND(100 * (setting.cash_per_point || 1000))}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick options for cash per point */}
-          {role === 'ADMIN' && (
-            <div className="pt-2">
-              <span className="text-xs text-slate-500 font-medium">Tùy chọn nhanh giá trị 1 điểm:</span>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                {[
-                  { cash: 500, label: '1 điểm = 500đ' },
-                  { cash: 1000, label: '1 điểm = 1.000đ (Chuẩn)' },
-                  { cash: 2000, label: '1 điểm = 2.000đ' },
-                  { cash: 5000, label: '1 điểm = 5.000đ' },
-                ].map((opt, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() =>
-                      setSetting({
-                        ...setting,
-                        cash_per_point: opt.cash,
-                      })
-                    }
-                    className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Interactive Calculator Simulator */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 mt-3 space-y-3">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-blue-600" /> Mô phỏng tích điểm & Giá trị quy đổi
-            </span>
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div className="w-full sm:w-60">
-                <span className="text-[11px] text-slate-500 block mb-1">Nhập số tiền hóa đơn:</span>
-                <input
-                  type="number"
-                  step="5000"
-                  value={testAmount}
-                  onChange={(e) => setTestAmount(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold"
-                />
-              </div>
-              <div className="flex-1 grid grid-cols-2 gap-2 w-full text-center text-xs">
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Điểm nhận được (Làm tròn xuống):</span>
-                  <span className="font-bold text-emerald-600 text-sm">{currentResult} điểm</span>
-                </div>
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Giá trị tiền mặt tương đương:</span>
-                  <span className="font-bold text-amber-600 text-sm">{formatVND(currentCashResult)}</span>
-                </div>
-              </div>
+            <div className="text-xs text-slate-500 font-medium pt-2 sm:pt-4">
+              Quy tắc tính: Luôn tự động làm tròn xuống (FLOOR). Ví dụ: 100 điểm = {formatVND(100 * (setting.cash_per_point || 1000))} tiền mặt.
             </div>
           </div>
         </div>
@@ -355,38 +225,6 @@ export default function SettingsPage() {
               />
               <span className="text-xs font-bold text-slate-600">ngày</span>
             </div>
-          </div>
-
-          {/* Preset Buttons */}
-          {role === 'ADMIN' && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-400 font-medium">Mốc thông dụng:</span>
-              {[30, 60, 90, 180, 365].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setSetting({ ...setting, expiry_days: d })}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all ${
-                    setting.expiry_days === d
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  {d} ngày {d === 90 ? '(Mặc định)' : ''}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Note */}
-          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 space-y-1 leading-relaxed">
-            <div className="font-bold flex items-center gap-1.5 text-amber-800">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              Lưu ý về hạn dùng:
-            </div>
-            <p>
-              Khi bạn thay đổi thời hạn sang {setting.expiry_days} ngày, các điểm đã tích trước đây vẫn giữ nguyên ngày hết hạn ban đầu để đảm bảo quyền lợi cho khách hàng.
-            </p>
           </div>
         </div>
 
