@@ -17,6 +17,7 @@ export const DEFAULT_SETTING: PointSetting = {
   id: 'default-setting-01',
   amount_per_point: 10000,
   points_per_amount: 1,
+  cash_per_point: 1000, // 1 điểm = 1.000 VNĐ tiền mặt
   rounding_mode: 'FLOOR',
   expiry_days: 90,
   is_active: true,
@@ -1723,13 +1724,18 @@ class LoyaltyStore {
           this.settings = {
             ...this.settings,
             ...data,
+            cash_per_point:
+              data.cash_per_point !== undefined && data.cash_per_point !== null
+                ? Number(data.cash_per_point)
+                : this.settings.cash_per_point || DEFAULT_SETTING.cash_per_point || 1000,
             bonus_tiers: data.bonus_tiers || this.settings.bonus_tiers || DEFAULT_SETTING.bonus_tiers,
+            rounding_mode: 'FLOOR',
           };
           return { ...this.settings };
         }
       } catch (_) {}
     }
-    return { ...this.settings };
+    return { ...this.settings, rounding_mode: 'FLOOR' };
   }
 
   public async updatePointSettings(newSettings: Partial<PointSetting>): Promise<PointSetting> {
@@ -1741,14 +1747,20 @@ class LoyaltyStore {
       await this.checkSupabaseConnection();
     }
 
-    // Luôn lưu mốc thưởng vào state nội bộ
+    // Luôn áp dụng quy tắc làm tròn xuống (FLOOR)
+    newSettings.rounding_mode = 'FLOOR';
+
+    // Luôn lưu mốc thưởng & giá trị tiền mặt vào state nội bộ
     if (newSettings.bonus_tiers !== undefined) {
       this.settings.bonus_tiers = newSettings.bonus_tiers;
+    }
+    if (newSettings.cash_per_point !== undefined) {
+      this.settings.cash_per_point = Number(newSettings.cash_per_point) || 1000;
     }
 
     if (this.isSupabaseLive) {
       try {
-        // 1. Thử update cả newSettings vào Supabase (nếu DB đã có cột bonus_tiers)
+        // 1. Thử update cả newSettings vào Supabase (nếu DB đã có cột bonus_tiers / cash_per_point)
         let updateRes = await supabase
           .from('point_settings')
           .update({
@@ -1760,9 +1772,9 @@ class LoyaltyStore {
           .select()
           .single();
 
-        // 2. Nếu DB chưa có cột bonus_tiers (lỗi PGRST204), update các trường chuẩn
+        // 2. Nếu DB chưa có cột bonus_tiers hoặc cash_per_point (lỗi PGRST204), update các trường cơ bản
         if (updateRes.error && updateRes.error.code === 'PGRST204') {
-          const { bonus_tiers, ...standardSettings } = newSettings;
+          const { bonus_tiers, cash_per_point, ...standardSettings } = newSettings;
           updateRes = await supabase
             .from('point_settings')
             .update({
@@ -1779,14 +1791,19 @@ class LoyaltyStore {
           this.settings = {
             ...this.settings,
             ...updateRes.data,
+            cash_per_point:
+              updateRes.data.cash_per_point !== undefined && updateRes.data.cash_per_point !== null
+                ? Number(updateRes.data.cash_per_point)
+                : this.settings.cash_per_point,
             bonus_tiers: updateRes.data.bonus_tiers || this.settings.bonus_tiers,
+            rounding_mode: 'FLOOR',
           };
           this.saveToLocalStorage();
           activityLogService.logActivity(
             'SETTINGS_UPDATE',
             'POINT_SETTING',
             updateRes.data.id,
-            `Cập nhật cấu hình tích điểm: ${updateRes.data.amount_per_point.toLocaleString('vi-VN')}đ = ${updateRes.data.points_per_amount} điểm, hạn ${updateRes.data.expiry_days} ngày`,
+            `Cập nhật cấu hình: ${updateRes.data.amount_per_point.toLocaleString('vi-VN')}đ = ${updateRes.data.points_per_amount} điểm, 1 điểm = ${(this.settings.cash_per_point || 1000).toLocaleString('vi-VN')}đ tiền mặt, hạn ${updateRes.data.expiry_days} ngày`,
             newSettings
           );
           return { ...this.settings };
@@ -1797,6 +1814,7 @@ class LoyaltyStore {
     this.settings = {
       ...this.settings,
       ...newSettings,
+      rounding_mode: 'FLOOR',
       updated_at: new Date().toISOString(),
       updated_by: 'ADMIN',
     };
@@ -1806,7 +1824,7 @@ class LoyaltyStore {
       'SETTINGS_UPDATE',
       'POINT_SETTING',
       this.settings.id,
-      `Cập nhật cấu hình tích điểm: ${this.settings.amount_per_point.toLocaleString('vi-VN')}đ = ${this.settings.points_per_amount} điểm, hạn ${this.settings.expiry_days} ngày`,
+      `Cập nhật cấu hình: ${this.settings.amount_per_point.toLocaleString('vi-VN')}đ = ${this.settings.points_per_amount} điểm, 1 điểm = ${(this.settings.cash_per_point || 1000).toLocaleString('vi-VN')}đ tiền mặt, hạn ${this.settings.expiry_days} ngày`,
       newSettings
     );
     return { ...this.settings };

@@ -14,6 +14,8 @@ import {
   LogIn,
   AlertCircle,
   Sparkles,
+  Coins,
+  Wallet,
 } from 'lucide-react';
 import { Customer, PointLot, PointTransaction } from '@/types/database';
 
@@ -48,9 +50,12 @@ interface LookupData {
   settings: {
     amount_per_point: number;
     points_per_amount: number;
+    cash_per_point?: number;
     expiry_days: number;
   };
+  cash_per_point?: number;
   cash_value: number;
+  total_amount_paid?: number;
 }
 
 export default function CustomerLookupPage() {
@@ -255,10 +260,10 @@ export default function CustomerLookupPage() {
                     </div>
                   </div>
 
-                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-black/20 px-3 py-1.5 rounded-lg self-start sm:self-center">
-                    <Gift className="w-4 h-4" />
+                  <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300 bg-black/30 px-3.5 py-2 rounded-xl self-start sm:self-center border border-amber-300/30 shadow-xs">
+                    <Coins className="w-4 h-4 text-amber-300 shrink-0" />
                     <span>
-                      Tương đương:{' '}
+                      Quy đổi tiền mặt:{' '}
                       <strong className="text-white text-sm">
                         {data.cash_value.toLocaleString('vi-VN')} đ
                       </strong>
@@ -267,19 +272,25 @@ export default function CustomerLookupPage() {
                 </div>
 
                 {/* Card Footer: Summary Stats */}
-                <div className="pt-2 border-t border-white/15 flex items-center justify-between text-xs text-emerald-100">
-                  <span>
-                    Tổng điểm đã tích:{' '}
-                    <strong className="text-white">
-                      {data.customer.lifetime_points_earned?.toLocaleString('vi-VN') || 0}
+                <div className="pt-3 border-t border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-emerald-100">
+                  <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
+                    <span className="text-[11px] text-emerald-200 font-medium">Số tiền đã thanh toán:</span>
+                    <strong className="text-white text-sm sm:text-base font-bold">
+                      {(data.total_amount_paid || 0).toLocaleString('vi-VN')} đ
                     </strong>
-                  </span>
-                  <span>
-                    Đã sử dụng:{' '}
-                    <strong className="text-white">
-                      {data.customer.lifetime_points_used?.toLocaleString('vi-VN') || 0}
+                  </div>
+                  <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
+                    <span className="text-[11px] text-emerald-200 font-medium">Tổng điểm đã tích:</span>
+                    <strong className="text-white text-sm sm:text-base font-bold">
+                      {(data.customer.lifetime_points_earned || 0).toLocaleString('vi-VN')} điểm
                     </strong>
-                  </span>
+                  </div>
+                  <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
+                    <span className="text-[11px] text-emerald-200 font-medium">Tổng điểm đã dùng:</span>
+                    <strong className="text-white text-sm sm:text-base font-bold">
+                      {(data.customer.lifetime_points_used || 0).toLocaleString('vi-VN')} điểm
+                    </strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -365,10 +376,18 @@ export default function CustomerLookupPage() {
                                     ? 'Cộng điểm đặt sân'
                                     : 'Dùng điểm giảm giá')}
                               </p>
-                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                              <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-1.5">
                                 <span>{dateObj.time}</span>
                                 <span>•</span>
                                 <span>{dateObj.date}</span>
+                                {tx.amount && tx.amount > 0 && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-semibold text-slate-600">
+                                      Thanh toán: {tx.amount.toLocaleString('vi-VN')} đ
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
 
@@ -465,13 +484,21 @@ export default function CustomerLookupPage() {
                           tiền sân được cộng{' '}
                           <span className="font-bold text-emerald-700">
                             {data.settings.points_per_amount} điểm
-                          </span>.
+                          </span> (làm tròn xuống).
+                        </li>
+                        <li>
+                          <strong>Quy đổi tiền mặt:</strong> Mỗi{' '}
+                          <span className="font-bold text-amber-700">1 điểm thưởng</span> có giá trị tương đương{' '}
+                          <span className="font-bold text-slate-900">
+                            {(data.cash_per_point || data.settings.cash_per_point || 1000).toLocaleString('vi-VN')} đ
+                          </span>{' '}
+                          tiền mặt khi dùng để trừ vào tiền sân khi thanh toán.
                         </li>
                         <li>
                           <strong>Thời hạn:</strong> Điểm có hạn dùng trong{' '}
                           <span className="font-bold text-slate-900">
                             {data.settings.expiry_days} ngày
-                          </span>. Điểm sắp hết hạn sẽ được ưu tiên dùng trước.
+                          </span>. Điểm sắp hết hạn sẽ được ưu tiên trừ trước.
                         </li>
                         <li>
                           <strong>Sử dụng điểm:</strong> Báo số điện thoại cho thu ngân khi thanh toán để trừ tiền trực tiếp vào hóa đơn.

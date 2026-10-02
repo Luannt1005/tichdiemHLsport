@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Info,
   Gift,
+  Coins,
   Plus,
   Trash2,
   Database,
@@ -62,14 +63,15 @@ export default function SettingsPage() {
       await loyaltyStore.updatePointSettings({
         amount_per_point: setting.amount_per_point,
         points_per_amount: setting.points_per_amount,
-        rounding_mode: setting.rounding_mode,
+        cash_per_point: setting.cash_per_point || 1000,
+        rounding_mode: 'FLOOR',
         expiry_days: setting.expiry_days,
         bonus_tiers: setting.bonus_tiers,
       });
 
       success(
         'Lưu cấu hình thành công!',
-        `Tỷ lệ mới: ${formatVND(setting.amount_per_point)} = ${setting.points_per_amount} điểm, Hạn dùng: ${setting.expiry_days} ngày.`
+        `Tỷ lệ: ${formatVND(setting.amount_per_point)} = ${setting.points_per_amount} điểm | 1 điểm = ${formatVND(setting.cash_per_point || 1000)} tiền mặt | Hạn dùng: ${setting.expiry_days} ngày.`
       );
     } catch (err: any) {
       error('Lỗi lưu cấu hình', err.message);
@@ -78,16 +80,11 @@ export default function SettingsPage() {
     }
   };
 
-  // Live sandbox calculation
-  const sandboxFloor = Math.floor((testAmount / setting.amount_per_point) * setting.points_per_amount);
-  const sandboxRound = Math.round((testAmount / setting.amount_per_point) * setting.points_per_amount);
-  const sandboxCeil = Math.ceil((testAmount / setting.amount_per_point) * setting.points_per_amount);
-  const currentResult = calculatePoints(
-    testAmount,
-    setting.amount_per_point,
-    setting.points_per_amount,
-    setting.rounding_mode
+  // Live sandbox calculation (luôn làm tròn xuống FLOOR)
+  const currentResult = Math.floor(
+    (testAmount / (setting.amount_per_point || 10000)) * (setting.points_per_amount || 1)
   );
+  const currentCashResult = currentResult * (setting.cash_per_point || 1000);
 
   const handleCopySchemaSql = () => {
     const sqlScript = `-- HƯỚNG DẪN: Mở Supabase Dashboard -> Vào Project dzemhqkvccmpoaumoytf -> Chọn SQL Editor -> Dán toàn bộ file supabase_schema.sql và supabase_seed.sql trong thư mục gốc rồi nhấn Run.`;
@@ -215,62 +212,98 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* Section 2: Làm tròn điểm (Rounding mode) */}
+        {/* Section 2: Quy đổi điểm thưởng ra tiền mặt */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-            <Calculator className="w-5 h-5 text-blue-600" />
-            <h3 className="text-base font-bold text-slate-900">Quy Tắc Làm Tròn Điểm</h3>
+            <Coins className="w-5 h-5 text-amber-600" />
+            <h3 className="text-base font-bold text-slate-900">Quy Đổi Điểm Thưởng → Giá Trị Tiền Mặt</h3>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              {
-                mode: 'FLOOR',
-                title: 'Làm tròn xuống',
-                desc: 'Khuyến nghị dùng. Bỏ phần số lẻ phía sau.',
-              },
-              {
-                mode: 'ROUND',
-                title: 'Làm tròn gần nhất',
-                desc: 'Từ 0.5 trở lên làm tròn lên 1 điểm, dưới 0.5 làm tròn xuống.',
-              },
-              {
-                mode: 'CEIL',
-                title: 'Làm tròn lên',
-                desc: 'Bất kỳ phần số lẻ nào cũng được làm tròn lên 1 điểm.',
-              },
-            ].map((opt) => (
-              <label
-                key={opt.mode}
-                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                  setting.rounding_mode === opt.mode
-                    ? 'border-emerald-500 bg-emerald-50/50'
-                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-xs text-slate-900">{opt.title}</span>
-                  <input
-                    type="radio"
-                    name="rounding_mode"
-                    disabled={role !== 'ADMIN'}
-                    value={opt.mode}
-                    checked={setting.rounding_mode === opt.mode}
-                    onChange={() =>
-                      setSetting({ ...setting, rounding_mode: opt.mode as RoundingMode })
-                    }
-                    className="text-emerald-600 focus:ring-emerald-500"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">{opt.desc}</p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Quy định giá trị tiền mặt tương ứng của mỗi điểm khi khách hàng tra cứu hoặc dùng điểm để khấu trừ tiền hóa đơn.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Giá trị tiền mặt của 1 điểm (VNĐ / Điểm) <span className="text-rose-500">*</span>
               </label>
-            ))}
+              <div className="relative">
+                <input
+                  type="number"
+                  min="100"
+                  step="100"
+                  disabled={role !== 'ADMIN'}
+                  value={setting.cash_per_point || 1000}
+                  onChange={(e) =>
+                    setSetting({
+                      ...setting,
+                      cash_per_point: Math.max(1, Number(e.target.value) || 0),
+                    })
+                  }
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all pr-14"
+                  placeholder="1000"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                  VNĐ
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Ví dụ: 1.000 VNĐ = 1 điểm có giá trị khấu trừ tương đương 1.000đ tiền mặt khi thanh toán.
+              </p>
+            </div>
+
+            <div className="p-4 bg-amber-50/60 border border-amber-200/80 rounded-2xl flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold text-amber-900 block mb-1">
+                  💡 Quy tắc tích điểm & Làm tròn
+                </span>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Quy tắc làm tròn điểm được cố định theo chuẩn <strong>Làm tròn xuống (FLOOR)</strong> để đảm bảo sự minh bạch và đồng nhất cho toàn hệ thống.
+                </p>
+              </div>
+              <div className="mt-2 pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs text-amber-950 font-semibold">
+                <span>Trực quan 100 điểm:</span>
+                <span className="font-bold text-amber-700">
+                  = {formatVND(100 * (setting.cash_per_point || 1000))}
+                </span>
+              </div>
+            </div>
           </div>
+
+          {/* Quick options for cash per point */}
+          {role === 'ADMIN' && (
+            <div className="pt-2">
+              <span className="text-xs text-slate-500 font-medium">Tùy chọn nhanh giá trị 1 điểm:</span>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                {[
+                  { cash: 500, label: '1 điểm = 500đ' },
+                  { cash: 1000, label: '1 điểm = 1.000đ (Chuẩn)' },
+                  { cash: 2000, label: '1 điểm = 2.000đ' },
+                  { cash: 5000, label: '1 điểm = 5.000đ' },
+                ].map((opt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() =>
+                      setSetting({
+                        ...setting,
+                        cash_per_point: opt.cash,
+                      })
+                    }
+                    className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Interactive Calculator Simulator */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 mt-3 space-y-3">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-blue-600" /> Thử nghiệm tính điểm thực tế
+              <Info className="w-4 h-4 text-blue-600" /> Mô phỏng tích điểm & Giá trị quy đổi
             </span>
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <div className="w-full sm:w-60">
@@ -283,24 +316,16 @@ export default function SettingsPage() {
                   className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold"
                 />
               </div>
-              <div className="flex-1 grid grid-cols-3 gap-2 w-full text-center text-xs">
-                <div className="p-2 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Làm tròn xuống:</span>
-                  <span className="font-bold text-slate-800">{sandboxFloor} điểm</span>
+              <div className="flex-1 grid grid-cols-2 gap-2 w-full text-center text-xs">
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 block">Điểm nhận được (Làm tròn xuống):</span>
+                  <span className="font-bold text-emerald-600 text-sm">{currentResult} điểm</span>
                 </div>
-                <div className="p-2 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Làm tròn gần nhất:</span>
-                  <span className="font-bold text-slate-800">{sandboxRound} điểm</span>
-                </div>
-                <div className="p-2 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Làm tròn lên:</span>
-                  <span className="font-bold text-slate-800">{sandboxCeil} điểm</span>
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 block">Giá trị tiền mặt tương đương:</span>
+                  <span className="font-bold text-amber-600 text-sm">{formatVND(currentCashResult)}</span>
                 </div>
               </div>
-            </div>
-            <div className="text-xs text-emerald-800 font-semibold pt-1">
-              → Khách sẽ nhận được:{' '}
-              <span className="text-emerald-700 font-bold underline">{currentResult} điểm</span>
             </div>
           </div>
         </div>

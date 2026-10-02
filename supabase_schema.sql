@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.point_settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     amount_per_point NUMERIC(15, 2) NOT NULL DEFAULT 10000.00 CHECK (amount_per_point > 0),
     points_per_amount INTEGER NOT NULL DEFAULT 1 CHECK (points_per_amount > 0),
+    cash_per_point NUMERIC(15, 2) NOT NULL DEFAULT 1000.00 CHECK (cash_per_point > 0),
     rounding_mode VARCHAR(20) NOT NULL DEFAULT 'FLOOR' CHECK (rounding_mode IN ('FLOOR', 'ROUND', 'CEIL')),
     expiry_days INTEGER NOT NULL DEFAULT 90 CHECK (expiry_days > 0),
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -20,9 +21,12 @@ CREATE TABLE IF NOT EXISTS public.point_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Migration nếu bảng đã tồn tại trước đó
+ALTER TABLE public.point_settings ADD COLUMN IF NOT EXISTS cash_per_point NUMERIC(15, 2) NOT NULL DEFAULT 1000.00;
+
 -- Tạo bản ghi cấu hình mặc định nếu chưa có
-INSERT INTO public.point_settings (amount_per_point, points_per_amount, rounding_mode, expiry_days, is_active, updated_by)
-SELECT 10000.00, 1, 'FLOOR', 90, true, 'SYSTEM_INIT'
+INSERT INTO public.point_settings (amount_per_point, points_per_amount, cash_per_point, rounding_mode, expiry_days, is_active, updated_by)
+SELECT 10000.00, 1, 1000.00, 'FLOOR', 90, true, 'SYSTEM_INIT'
 WHERE NOT EXISTS (SELECT 1 FROM public.point_settings WHERE is_active = true);
 
 -- 3. BẢNG KHÁCH HÀNG (CUSTOMERS)

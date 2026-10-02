@@ -228,6 +228,12 @@ export function RedeemPointsModal({
                     / {currentBalance} điểm
                   </span>
                 </div>
+                <div className="flex items-center justify-between text-xs mt-1.5 px-1 bg-amber-50/80 p-2 rounded-xl border border-amber-200/60">
+                  <span className="text-amber-900 font-medium">Quy đổi tiền mặt giảm:</span>
+                  <span className="font-extrabold text-emerald-700">
+                    -{formatVND(numPointsToRedeem * (setting.cash_per_point || 1000))}
+                  </span>
+                </div>
               </div>
 
               {/* FEFO Allocation Preview */}
@@ -249,7 +255,7 @@ export function RedeemPointsModal({
                           (hết hạn {formatDateOnly(lot.expires_at)})
                         </span>
                       </div>
-                      <span className="font-bold text-rose-600">-{deduct} đ</span>
+                      <span className="font-bold text-rose-600">-{deduct} điểm</span>
                     </div>
                   ))}
                 </div>
@@ -282,7 +288,7 @@ export function RedeemPointsModal({
                     <span>Xác nhận trừ điểm khách hàng</span>
                   </div>
                   <p className="text-[11px] leading-relaxed">
-                    Bạn có chắc chắn muốn trừ <strong>{pointsToRedeem} điểm</strong> của khách hàng <strong>{customer.name}</strong>? Thao tác này sẽ ghi nhận vào sổ cái giao dịch và không thể hoàn tác trực tiếp.
+                    Bạn có chắc chắn muốn trừ <strong>{pointsToRedeem} điểm</strong> (giảm <strong>{formatVND(numPointsToRedeem * (setting.cash_per_point || 1000))}</strong> tiền mặt) của khách hàng <strong>{customer.name}</strong>? Thao tác này sẽ ghi nhận vào sổ cái giao dịch và không thể hoàn tác trực tiếp.
                   </p>
                 </div>
               )}

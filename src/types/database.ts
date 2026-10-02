@@ -83,8 +83,10 @@ export interface PointSetting {
   updated_by: string;
   created_at: string;
   updated_at: string;
-  /** Mốc thưởng điểm theo giá trị hóa đơn (lưu local, chưa đồng bộ DB) */
+  /** Mốc thưởng điểm theo giá trị hóa đơn */
   bonus_tiers?: BonusTier[];
+  /** Giá trị tiền mặt quy đổi tương ứng với 1 điểm thưởng (VNĐ) */
+  cash_per_point?: number;
 }
 
 export interface PointTransaction {

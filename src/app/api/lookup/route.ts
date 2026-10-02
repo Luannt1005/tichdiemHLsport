@@ -39,11 +39,25 @@ export async function GET(request: NextRequest) {
       limit: 15,
     });
 
-    // 4. Lấy cấu hình điểm hiện hành để tính giá trị tiền tệ tương đương
+    // 4. Lấy cấu hình điểm hiện hành để tính giá trị tiền mặt tương đương (1 điểm = cash_per_point VNĐ)
     const settings = await loyaltyStore.getPointSettings();
-    const cashValue = Math.floor(
-      customer.total_points * (settings.amount_per_point / settings.points_per_amount)
+    const cashPerPoint = settings.cash_per_point || 1000;
+    const cashValue = Math.floor(customer.total_points * cashPerPoint);
+
+    // 5. Tính tổng số tiền khách đã thanh toán từ các hóa đơn tích điểm
+    const earnTransactions = await loyaltyStore.getTransactions({
+      customerId: customer.id,
+      type: 'EARN',
+      limit: 500,
+    });
+    const txTotal = earnTransactions.reduce(
+      (sum, tx) => sum + (Number(tx.amount) || 0),
+      0
     );
+    const totalAmountPaid =
+      txTotal > 0
+        ? txTotal
+        : (customer.lifetime_points_earned || 0) * (settings.amount_per_point / settings.points_per_amount);
 
     return NextResponse.json({
       success: true,
@@ -53,9 +67,11 @@ export async function GET(request: NextRequest) {
       settings: {
         amount_per_point: settings.amount_per_point,
         points_per_amount: settings.points_per_amount,
+        cash_per_point: cashPerPoint,
         expiry_days: settings.expiry_days,
       },
       cash_value: cashValue,
+      total_amount_paid: totalAmountPaid,
     });
   } catch (error: any) {
     console.error('Error in lookup API:', error);
