@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const BASE = 'http://localhost:3000/api';
-const url = 'https://dzemhqkvccmpoaumoytf.supabase.co';
-const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6ZW1ocWt2Y2NtcG9hdW1veXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NjI2MTEsImV4cCI6MjEwNTAzODYxMX0.FaP3ijT2Qsf4Tck2byG-8hbmbT-ttzgKWjU3yWf91QE';
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(url, anonKey);
 
 async function runFullSuite() {
