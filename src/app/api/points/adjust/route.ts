@@ -1,51 +1,26 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse, optionalString, readJsonBody } from '@/lib/server/api-response';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request, ['ADMIN']);
+  if (auth.response) return auth.response;
+
   try {
-    const body = await request.json();
-    const { customerId, pointsDelta, reason, createdBy } = body;
-
+    const body = await readJsonBody(request);
+    const customerId = optionalString(body.customerId);
     if (!customerId) {
-      return NextResponse.json(
-        { error: 'Mã khách hàng (customerId) là bắt buộc' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Mã khách hàng (customerId) là bắt buộc' }, { status: 400 });
     }
 
-    const numDelta = Number(pointsDelta);
-    if (isNaN(numDelta) || numDelta === 0) {
-      return NextResponse.json(
-        { error: 'Số điểm điều chỉnh phải khác 0' },
-        { status: 400 }
-      );
-    }
-
-    if (!reason || !reason.trim()) {
-      return NextResponse.json(
-        { error: 'Lý do điều chỉnh điểm là bắt buộc (Audit log)' },
-        { status: 400 }
-      );
-    }
-
-    const result = await loyaltyStore.adjustPoints({
+    const result = await loyaltyStore.adjustPoints(auth.user, {
       customerId,
-      pointsDelta: numDelta,
-      reason: reason.trim(),
-      createdBy,
+      pointsDelta: Number(body.pointsDelta),
+      reason: optionalString(body.reason) || '',
     });
-
-    return NextResponse.json({
-      success: true,
-      pointsDelta: numDelta,
-      newTotalPoints: result.customer.total_points,
-      customer: result.customer,
-      transaction: result.transaction,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi xử lý điều chỉnh điểm' },
-      { status: 400 }
-    );
+    return NextResponse.json(result);
+  } catch (err) {
+    return errorResponse(err, 'Lỗi xử lý điều chỉnh điểm');
   }
 }

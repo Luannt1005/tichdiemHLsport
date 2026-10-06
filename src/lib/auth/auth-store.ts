@@ -1,76 +1,51 @@
-import { supabase } from '@/lib/supabase/client';
-import { AppUser, UserRole } from '@/types/database';
+import { useSyncExternalStore } from 'react';
+import { loyaltyApi, setUnauthorizedHandler } from '@/lib/api/loyalty-api';
+import { AppUser, CreateUserInput, UserListResult, UserRole } from '@/types/database';
 
-export interface StoredSession {
-  user: AppUser;
-  token: string;
-  loginAt: string;
+/**
+ * Trạng thái đăng nhập phía CLIENT (chỉ để hiển thị UI).
+ * Bằng chứng xác thực thật là cookie httpOnly do server cấp; mọi quyền được kiểm tra lại ở API.
+ */
+const SESSION_KEY = 'hl_auth_session';
+
+type ActionResult = { success: boolean; error?: string };
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
 }
 
-// Danh sách tài khoản mặc định được cấu hình sẵn cho hệ thống
-export const PRESET_USERS: (AppUser & { password_hash: string })[] = [
-  {
-    id: 'user-admin-01',
-    username: 'admin',
-    email: 'admin@hlsport.vn',
-    name: 'Quản trị viên HL Sport',
-    role: 'ADMIN',
-    password_hash: 'admin123',
-    is_active: true,
-    last_login_at: new Date().toISOString(),
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'user-staff-01',
-    username: 'nhanvien',
-    email: 'nhanvien@hlsport.vn',
-    name: 'Thu ngân HL Sport',
-    role: 'STAFF',
-    password_hash: 'staff123',
-    is_active: true,
-    last_login_at: new Date().toISOString(),
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-];
-
-const SESSION_KEY = 'hl_auth_session';
-const USERS_KEY = 'hl_auth_users';
+async function run(action: () => Promise<unknown>, fallback: string): Promise<ActionResult> {
+  try {
+    await action();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: errorMessage(err, fallback) };
+  }
+}
 
 class AuthStore {
   private currentUser: AppUser | null = null;
-  private users: (AppUser & { password_hash: string })[] = [...PRESET_USERS];
   private listeners: Set<(user: AppUser | null) => void> = new Set();
 
   constructor() {
-    this.init();
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(SESSION_KEY);
+        if (cached) this.currentUser = JSON.parse(cached) as AppUser;
+      } catch {
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
+    setUnauthorizedHandler(() => this.setUser(null));
   }
 
-  private init() {
-    if (typeof window === 'undefined') return;
-
-    try {
-      // Tải danh sách user tùy chỉnh đã lưu trong localStorage
-      const savedUsers = localStorage.getItem(USERS_KEY);
-      if (savedUsers) {
-        const parsed = JSON.parse(savedUsers);
-        // Merge preset users with saved users
-        const map = new Map<string, AppUser & { password_hash: string }>();
-        for (const u of PRESET_USERS) map.set(u.username, u);
-        for (const u of parsed) map.set(u.username, u);
-        this.users = Array.from(map.values());
-      } else {
-        localStorage.setItem(USERS_KEY, JSON.stringify(this.users));
-      }
-
-      // Tải session hiện tại
-      const sessionStr = localStorage.getItem(SESSION_KEY);
-      if (sessionStr) {
-        const session: StoredSession = JSON.parse(sessionStr);
-        this.currentUser = session.user;
-      }
-    } catch (e) {
-      console.warn('AuthStore init error:', e);
+  private setUser(user: AppUser | null) {
+    this.currentUser = user;
+    if (typeof window !== 'undefined') {
+      if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      else localStorage.removeItem(SESSION_KEY);
     }
+    this.listeners.forEach((fn) => fn(user));
   }
 
   public subscribe(listener: (user: AppUser | null) => void): () => void {
@@ -80,588 +55,98 @@ class AuthStore {
     };
   }
 
-  private notify() {
-    this.listeners.forEach((fn) => fn(this.currentUser));
-  }
-
   public getCurrentUser(): AppUser | null {
-    if (!this.currentUser && typeof window !== 'undefined') {
-      const sessionStr = localStorage.getItem(SESSION_KEY);
-      if (sessionStr) {
-        try {
-          const session: StoredSession = JSON.parse(sessionStr);
-          this.currentUser = session.user;
-        } catch (_) {}
-      }
-    }
     return this.currentUser;
   }
 
   public isAuthenticated(): boolean {
-    return this.getCurrentUser() !== null;
+    return this.currentUser !== null;
   }
 
-  public async login(
-    usernameInput: string,
-    passwordInput: string
-  ): Promise<{ success: boolean; user?: AppUser; error?: string }> {
-    const rawUsername = usernameInput.trim().toLowerCase();
-    const rawPassword = passwordInput.trim();
-
-    if (!rawUsername || !rawPassword) {
-      return { success: false, error: 'Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu' };
-    }
-
-    // 1. Thử xác thực với Supabase trước (nếu kết nối database)
+  /** Xác minh lại phiên với server (role / trạng thái khóa mới nhất) */
+  public async refresh(): Promise<AppUser | null> {
     try {
-      const { data: dbUser, error: dbError } = await supabase
-        .from('app_users')
-        .select('*')
-        .or(`username.eq.${rawUsername},email.eq.${rawUsername}`)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (!dbError && dbUser) {
-        if (dbUser.password_hash === rawPassword) {
-          const userObj: AppUser = {
-            id: dbUser.id,
-            username: dbUser.username,
-            email: dbUser.email,
-            name: dbUser.name,
-            role: dbUser.role as UserRole,
-            is_active: dbUser.is_active,
-            last_login_at: new Date().toISOString(),
-            created_at: dbUser.created_at,
-          };
-
-          // Cập nhật last_login_at trên Supabase
-          await supabase
-            .from('app_users')
-            .update({ last_login_at: userObj.last_login_at })
-            .eq('id', userObj.id);
-
-          this.saveSession(userObj);
-          return { success: true, user: userObj };
-        } else {
-          return { success: false, error: 'Mật khẩu không chính xác' };
-        }
-      }
-    } catch (_) {
-      // Fallback local store
+      const { user } = await loyaltyApi.me();
+      this.setUser(user);
+      return user;
+    } catch {
+      this.setUser(null);
+      return null;
     }
-
-    // 2. Xác thực với danh sách tài khoản Local (bao gồm preset Admin & Staff)
-    const localUser = this.users.find(
-      (u) =>
-        (u.username.toLowerCase() === rawUsername || (u.email && u.email.toLowerCase() === rawUsername)) &&
-        u.is_active
-    );
-
-    if (!localUser) {
-      return { success: false, error: 'Tài khoản không tồn tại hoặc đã bị khóa' };
-    }
-
-    if (localUser.password_hash !== rawPassword) {
-      return { success: false, error: 'Mật khẩu không chính xác' };
-    }
-
-    const updatedUser: AppUser = {
-      id: localUser.id,
-      username: localUser.username,
-      email: localUser.email,
-      name: localUser.name,
-      role: localUser.role,
-      is_active: localUser.is_active,
-      last_login_at: new Date().toISOString(),
-      created_at: localUser.created_at,
-    };
-
-    // Update in memory & local storage
-    localUser.last_login_at = updatedUser.last_login_at;
-    this.saveUsersToLocalStorage();
-    this.saveSession(updatedUser);
-
-    return { success: true, user: updatedUser };
   }
 
-  private saveSession(user: AppUser) {
-    this.currentUser = user;
-    if (typeof window !== 'undefined') {
-      const session: StoredSession = {
-        user,
-        token: `session-${user.id}-${Date.now()}`,
-        loginAt: new Date().toISOString(),
-      };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      // Lưu role tương thích với loyaltyStore cũ
-      localStorage.setItem('hl_loyalty_role', user.role);
-    }
-    this.notify();
-  }
-
-  private saveUsersToLocalStorage() {
-    if (typeof window === 'undefined') return;
+  public async login(username: string, password: string): Promise<ActionResult & { user?: AppUser }> {
     try {
-      localStorage.setItem(USERS_KEY, JSON.stringify(this.users));
-    } catch (e) {
-      console.warn('Save users error', e);
+      const { user } = await loyaltyApi.login(username, password);
+      this.setUser(user);
+      return { success: true, user };
+    } catch (err) {
+      return { success: false, error: errorMessage(err, 'Có lỗi xảy ra khi đăng nhập') };
     }
   }
 
   public async logout(): Promise<void> {
-    this.currentUser = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(SESSION_KEY);
-    }
-    this.notify();
-  }
-
-  public async changePassword(
-    oldPassword: string,
-    newPassword: string
-  ): Promise<{ success: boolean; error?: string }> {
-    if (!this.currentUser) {
-      return { success: false, error: 'Bạn chưa đăng nhập' };
-    }
-
-    if (!newPassword || newPassword.length < 6) {
-      return { success: false, error: 'Mật khẩu mới phải có ít nhất 6 ký tự' };
-    }
-
-    // Try Supabase first
     try {
-      const { data: dbUser } = await supabase
-        .from('app_users')
-        .select('*')
-        .eq('id', this.currentUser.id)
-        .maybeSingle();
-
-      if (dbUser) {
-        if (dbUser.password_hash !== oldPassword) {
-          return { success: false, error: 'Mật khẩu cũ không chính xác' };
-        }
-        const { error: updateErr } = await supabase
-          .from('app_users')
-          .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
-          .eq('id', this.currentUser.id);
-
-        if (updateErr) {
-          return { success: false, error: 'Không thể cập nhật mật khẩu trên Supabase' };
-        }
-      }
-    } catch (_) {}
-
-    // Update local user
-    const local = this.users.find((u) => u.id === this.currentUser?.id);
-    if (local) {
-      if (local.password_hash !== oldPassword) {
-        return { success: false, error: 'Mật khẩu hiện tại không đúng' };
-      }
-      local.password_hash = newPassword;
-      this.saveUsersToLocalStorage();
+      await loyaltyApi.logout();
+    } finally {
+      this.setUser(null);
     }
-
-    return { success: true };
   }
 
-  public async checkDatabaseUsersTable(): Promise<{ exists: boolean; error?: string }> {
+  public async register(params: CreateUserInput): Promise<ActionResult & { user?: AppUser }> {
     try {
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('id')
-        .limit(1);
-
-      if (error) {
-        if (error.code === 'PGRST205') {
-          return {
-            exists: false,
-            error: 'Bảng "app_users" chưa tồn tại trong cơ sở dữ liệu Supabase.',
-          };
-        }
-        return { exists: false, error: error.message };
-      }
-      return { exists: true };
-    } catch (e: any) {
-      return { exists: false, error: e?.message || 'Không thể kết nối Supabase' };
+      const { user } = await loyaltyApi.register(params);
+      return { success: true, user };
+    } catch (err) {
+      return { success: false, error: errorMessage(err, 'Không thể tạo tài khoản') };
     }
   }
 
-  public async createUser(params: {
-    username: string;
-    name: string;
-    email?: string;
-    password: string;
-    role?: UserRole;
-  }): Promise<{ success: boolean; user?: AppUser; error?: string; isDatabase?: boolean }> {
-    const rawUsername = params.username.trim().toLowerCase();
-    const rawName = params.name.trim();
-    const rawEmail = params.email?.trim().toLowerCase() || null;
-    const rawPassword = params.password.trim();
-    const role: UserRole = params.role || 'STAFF';
+  public changePassword(oldPassword: string, newPassword: string): Promise<ActionResult> {
+    return run(() => loyaltyApi.changePassword(oldPassword, newPassword), 'Không thể đổi mật khẩu');
+  }
 
-    if (!rawUsername || rawUsername.length < 3) {
-      return { success: false, error: 'Tên đăng nhập phải có ít nhất 3 ký tự' };
-    }
+  // ===== Quản trị người dùng (ADMIN) =====
 
-    if (!/^[a-z0-9_]+$/.test(rawUsername)) {
-      return {
-        success: false,
-        error: 'Tên đăng nhập chỉ được chứa chữ cái không dấu, chữ số và dấu gạch dưới (_)',
-      };
-    }
+  public getUsers(): Promise<UserListResult> {
+    return loyaltyApi.getUsers();
+  }
 
-    if (!rawName || rawName.length < 2) {
-      return { success: false, error: 'Họ và tên phải có ít nhất 2 ký tự' };
-    }
-
-    if (!rawPassword || rawPassword.length < 6) {
-      return { success: false, error: 'Mật khẩu phải có tối thiểu 6 ký tự' };
-    }
-
-    // 1. Kiểm tra bảng app_users trên Supabase
+  public async createUser(params: CreateUserInput): Promise<ActionResult & { user?: AppUser }> {
     try {
-      const { data: existingUser, error: checkErr } = await supabase
-        .from('app_users')
-        .select('id, username')
-        .eq('username', rawUsername)
-        .maybeSingle();
-
-      if (checkErr) {
-        if (checkErr.code === 'PGRST205') {
-          return {
-            success: false,
-            error:
-              'Bảng "app_users" chưa được tạo trên Supabase Database. Vui lòng chạy mã trong file "supabase_auth_logs.sql" trong Supabase SQL Editor.',
-          };
-        }
-        return { success: false, error: `Lỗi kết nối Supabase: ${checkErr.message}` };
-      }
-
-      if (existingUser) {
-        return { success: false, error: `Tên đăng nhập '${rawUsername}' đã được sử dụng` };
-      }
-
-      if (rawEmail) {
-        const { data: existingEmail } = await supabase
-          .from('app_users')
-          .select('id, email')
-          .eq('email', rawEmail)
-          .maybeSingle();
-
-        if (existingEmail) {
-          return { success: false, error: `Email '${rawEmail}' đã được sử dụng` };
-        }
-      }
-
-      // 2. Thêm người dùng vào Supabase app_users
-      const { data: created, error: insertErr } = await supabase
-        .from('app_users')
-        .insert({
-          username: rawUsername,
-          name: rawName,
-          email: rawEmail,
-          password_hash: rawPassword,
-          role,
-          is_active: true,
-          last_login_at: null,
-        })
-        .select()
-        .single();
-
-      if (insertErr) {
-        return {
-          success: false,
-          error: `Không thể lưu vào Supabase: ${insertErr.message} (mã: ${insertErr.code})`,
-        };
-      }
-
-      if (created) {
-        const userObj: AppUser = {
-          id: created.id,
-          username: created.username,
-          name: created.name,
-          email: created.email,
-          role: created.role as UserRole,
-          is_active: created.is_active,
-          last_login_at: created.last_login_at,
-          created_at: created.created_at,
-        };
-
-        // Đồng bộ vào cache danh sách nội bộ
-        this.users = this.users.filter((u) => u.id !== userObj.id && u.username !== userObj.username);
-        this.users.unshift({ ...userObj, password_hash: rawPassword });
-        this.saveUsersToLocalStorage();
-
-        // KHÔNG gọi saveSession ở đây để không làm mất phiên đăng nhập của Admin
-        return { success: true, user: userObj, isDatabase: true };
-      }
-    } catch (err: any) {
-      return {
-        success: false,
-        error: `Lỗi kết nối cơ sở dữ liệu: ${err?.message || 'Không thể liên lạc Supabase'}`,
-      };
+      const { user } = await loyaltyApi.createUser(params);
+      return { success: true, user };
+    } catch (err) {
+      return { success: false, error: errorMessage(err, 'Không thể tạo tài khoản') };
     }
-
-    return { success: false, error: 'Không thể tạo tài khoản người dùng' };
   }
 
-  public async register(
-    params: {
-      username: string;
-      name: string;
-      email?: string;
-      password: string;
-      role?: UserRole;
-    },
-    autoLogin: boolean = true
-  ): Promise<{ success: boolean; user?: AppUser; error?: string }> {
-    const res = await this.createUser(params);
-    if (!res.success) {
-      // Nếu lỗi do bảng chưa tạo trên Supabase và đây là đăng ký tự do, fallback lưu local tạm
-      if (res.error?.includes('app_users') || res.error?.includes('PGRST205')) {
-        const rawUsername = params.username.trim().toLowerCase();
-        const rawName = params.name.trim();
-        const rawEmail = params.email?.trim().toLowerCase() || null;
-        const rawPassword = params.password.trim();
-        const role: UserRole = params.role || 'STAFF';
-
-        const existsLocal = this.users.find(
-          (u) =>
-            u.username.toLowerCase() === rawUsername ||
-            (rawEmail && u.email?.toLowerCase() === rawEmail)
-        );
-
-        if (existsLocal) {
-          return { success: false, error: `Tên đăng nhập hoặc email đã được sử dụng` };
-        }
-
-        const newUser: AppUser & { password_hash: string } = {
-          id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          username: rawUsername,
-          name: rawName,
-          email: rawEmail,
-          password_hash: rawPassword,
-          role,
-          is_active: true,
-          last_login_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        };
-
-        this.users.push(newUser);
-        this.saveUsersToLocalStorage();
-
-        const userObj: AppUser = {
-          id: newUser.id,
-          username: newUser.username,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          is_active: newUser.is_active,
-          last_login_at: newUser.last_login_at,
-          created_at: newUser.created_at,
-        };
-
-        if (autoLogin) {
-          this.saveSession(userObj);
-        }
-        return { success: true, user: userObj };
-      }
-      return res;
-    }
-
-    if (autoLogin && res.user) {
-      this.saveSession(res.user);
-    }
-    return res;
+  public async updateUserRole(userId: string, role: UserRole): Promise<ActionResult> {
+    const result = await run(() => loyaltyApi.updateUserRole(userId, role), 'Không thể phân quyền');
+    if (result.success && userId === this.currentUser?.id) await this.refresh();
+    return result;
   }
 
-  public async getUsers(): Promise<AppUser[]> {
-    // 1. Thử lấy từ Supabase
-    try {
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        // Sync to local memory
-        const list: AppUser[] = data.map((u) => ({
-          id: u.id,
-          username: u.username,
-          name: u.name,
-          email: u.email,
-          role: u.role as UserRole,
-          is_active: u.is_active,
-          last_login_at: u.last_login_at,
-          created_at: u.created_at,
-        }));
-
-        // Merge password_hash if exists locally
-        for (const u of data) {
-          const localIdx = this.users.findIndex((lu) => lu.id === u.id || lu.username === u.username);
-          if (localIdx !== -1) {
-            this.users[localIdx] = {
-              ...u,
-              role: u.role as UserRole,
-              password_hash: u.password_hash || this.users[localIdx].password_hash,
-            };
-          } else {
-            this.users.push({
-              ...u,
-              role: u.role as UserRole,
-              password_hash: u.password_hash || 'admin123',
-            });
-          }
-        }
-        this.saveUsersToLocalStorage();
-        return list;
-      }
-    } catch (_) {}
-
-    // 2. Fallback local users
-    return this.users.map(({ password_hash, ...u }) => u);
+  public toggleUserStatus(userId: string, isActive: boolean): Promise<ActionResult> {
+    return run(() => loyaltyApi.setUserActive(userId, isActive), 'Không thể đổi trạng thái tài khoản');
   }
 
-  public async updateUserRole(
-    userId: string,
-    newRole: UserRole
-  ): Promise<{ success: boolean; error?: string }> {
-    if (this.currentUser?.role !== 'ADMIN') {
-      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền thay đổi phân quyền' };
-    }
-
-    const targetUser = this.users.find((u) => u.id === userId);
-    if (!targetUser) {
-      return { success: false, error: 'Không tìm thấy tài khoản người dùng' };
-    }
-
-    // Không cho phép tự hạ quyền admin nếu là admin duy nhất
-    if (userId === this.currentUser?.id && newRole !== 'ADMIN') {
-      const adminCount = this.users.filter((u) => u.role === 'ADMIN' && u.is_active).length;
-      if (adminCount <= 1) {
-        return {
-          success: false,
-          error: 'Không thể hạ quyền của Quản trị viên duy nhất đang hoạt động trong hệ thống',
-        };
-      }
-    }
-
-    // Update Supabase
-    try {
-      await supabase
-        .from('app_users')
-        .update({ role: newRole, updated_at: new Date().toISOString() })
-        .eq('id', userId);
-    } catch (_) {}
-
-    // Update Local
-    targetUser.role = newRole;
-    if (this.currentUser && this.currentUser.id === userId) {
-      this.currentUser.role = newRole;
-      this.saveSession(this.currentUser);
-    }
-    this.saveUsersToLocalStorage();
-
-    return { success: true };
+  public resetUserPassword(userId: string, newPassword: string): Promise<ActionResult> {
+    return run(() => loyaltyApi.resetUserPassword(userId, newPassword), 'Đặt lại mật khẩu thất bại');
   }
 
-  public async toggleUserStatus(
-    userId: string,
-    isActive: boolean
-  ): Promise<{ success: boolean; error?: string }> {
-    if (this.currentUser?.role !== 'ADMIN') {
-      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền khóa/mở khóa tài khoản' };
-    }
-
-    if (userId === this.currentUser?.id && !isActive) {
-      return { success: false, error: 'Bạn không thể tự khóa tài khoản của chính mình!' };
-    }
-
-    const targetUser = this.users.find((u) => u.id === userId);
-    if (!targetUser) {
-      return { success: false, error: 'Không tìm thấy tài khoản người dùng' };
-    }
-
-    // Update Supabase
-    try {
-      await supabase
-        .from('app_users')
-        .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .eq('id', userId);
-    } catch (_) {}
-
-    // Update Local
-    targetUser.is_active = isActive;
-    this.saveUsersToLocalStorage();
-
-    return { success: true };
-  }
-
-  public async resetUserPassword(
-    userId: string,
-    newPassword: string
-  ): Promise<{ success: boolean; error?: string }> {
-    if (this.currentUser?.role !== 'ADMIN') {
-      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền đặt lại mật khẩu người dùng' };
-    }
-
-    if (!newPassword || newPassword.length < 6) {
-      return { success: false, error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' };
-    }
-
-    const targetUser = this.users.find((u) => u.id === userId);
-    if (!targetUser) {
-      return { success: false, error: 'Không tìm thấy tài khoản người dùng' };
-    }
-
-    // Update Supabase
-    try {
-      await supabase
-        .from('app_users')
-        .update({ password_hash: newPassword, updated_at: new Date().toISOString() })
-        .eq('id', userId);
-    } catch (_) {}
-
-    // Update Local
-    targetUser.password_hash = newPassword;
-    this.saveUsersToLocalStorage();
-
-    return { success: true };
-  }
-
-  public async deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
-    if (this.currentUser?.role !== 'ADMIN') {
-      return { success: false, error: 'Chỉ có Quản trị viên mới có quyền xóa tài khoản' };
-    }
-
-    if (userId === this.currentUser?.id) {
-      return { success: false, error: 'Bạn không thể tự xóa tài khoản của chính mình!' };
-    }
-
-    const targetIndex = this.users.findIndex((u) => u.id === userId);
-    if (targetIndex === -1) {
-      return { success: false, error: 'Không tìm thấy tài khoản cần xóa' };
-    }
-
-    const targetUser = this.users[targetIndex];
-    if (targetUser.role === 'ADMIN') {
-      const adminCount = this.users.filter((u) => u.role === 'ADMIN').length;
-      if (adminCount <= 1) {
-        return { success: false, error: 'Không thể xóa Quản trị viên duy nhất trong hệ thống!' };
-      }
-    }
-
-    // Delete Supabase
-    try {
-      await supabase.from('app_users').delete().eq('id', userId);
-    } catch (_) {}
-
-    // Delete Local
-    this.users.splice(targetIndex, 1);
-    this.saveUsersToLocalStorage();
-
-    return { success: true };
+  public deleteUser(userId: string): Promise<ActionResult> {
+    return run(() => loyaltyApi.deleteUser(userId), 'Không thể xóa tài khoản');
   }
 }
 
 export const authStore = new AuthStore();
+
+/** Hook React đọc user hiện tại và tự cập nhật khi đăng nhập / đăng xuất */
+export function useCurrentUser(): AppUser | null {
+  return useSyncExternalStore(
+    (listener) => authStore.subscribe(listener),
+    () => authStore.getCurrentUser(),
+    () => null
+  );
+}

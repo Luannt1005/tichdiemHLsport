@@ -3,21 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  PlusCircle,
-  MinusCircle,
   ArrowRight,
-  TrendingUp,
-  Users,
   Activity,
 } from 'lucide-react';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
-import { DashboardStats, PointTransaction } from '@/types/database';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { formatDateTime, formatVND } from '@/lib/points-engine';
+import { TRANSACTION_TYPE_STYLES, formatPointsDelta, pointsTextClass } from '@/lib/transaction-display';
 import { KpiCards } from '@/components/dashboard/KpiCards';
 import { PointChart } from '@/components/dashboard/PointChart';
 import { ExpiringSoonSection } from '@/components/dashboard/ExpiringSoonSection';
 import { EarnPointsModal } from '@/components/pos/EarnPointsModal';
 import { RedeemPointsModal } from '@/components/pos/RedeemPointsModal';
-import { formatDateTime, formatVND } from '@/lib/points-engine';
+import { DashboardStats, PointTransaction } from '@/types/database';
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -33,16 +30,22 @@ export default function DashboardPage() {
   const [isEarnOpen, setIsEarnOpen] = useState(false);
   const [isRedeemOpen, setIsRedeemOpen] = useState(false);
 
-  const loadData = async () => {
-    const s = await loyaltyStore.getDashboardStats();
-    setStats(s);
-    const txs = await loyaltyStore.getTransactions({ limit: 5 });
-    setRecentTransactions(txs);
-  };
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadData = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let cancelled = false;
+    Promise.all([loyaltyApi.getStats(), loyaltyApi.getTransactions({ limit: 5 })])
+      .then(([s, txs]) => {
+        if (cancelled) return;
+        setStats(s);
+        setRecentTransactions(txs);
+      })
+      .catch((err) => console.error('Không tải được dữ liệu tổng quan:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   return (
     <div className="space-y-6">
@@ -94,7 +97,6 @@ export default function DashboardPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {recentTransactions.map((tx) => {
-                const isPositive = tx.points > 0;
                 return (
                   <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-3 text-slate-500 font-mono">
@@ -110,40 +112,16 @@ export default function DashboardPage() {
                     </td>
                     <td className="py-3 px-3">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                          tx.type === 'EARN'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : tx.type === 'REDEEM'
-                            ? 'bg-rose-100 text-rose-800'
-                            : tx.type === 'EXPIRE'
-                            ? 'bg-amber-100 text-amber-800'
-                            : tx.type === 'ADJUST'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-indigo-100 text-indigo-800'
-                        }`}
+                        className={`inline-block px-2 py-0.5 rounded-full font-bold text-[10px] ${TRANSACTION_TYPE_STYLES[tx.type].badgeClass}`}
                       >
-                        {tx.type === 'EARN'
-                          ? 'Tích điểm'
-                          : tx.type === 'REDEEM'
-                          ? 'Đổi điểm'
-                          : tx.type === 'EXPIRE'
-                          ? 'Hết hạn'
-                          : tx.type === 'ADJUST'
-                          ? 'Điều chỉnh'
-                          : 'Hoàn điểm'}
+                        {TRANSACTION_TYPE_STYLES[tx.type].label}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right font-bold">
                       <span
-                        className={
-                          isPositive
-                            ? 'text-emerald-600'
-                            : tx.type === 'EXPIRE'
-                            ? 'text-amber-600'
-                            : 'text-rose-600'
-                        }
+                        className={pointsTextClass(tx)}
                       >
-                        {isPositive ? `+${tx.points}` : tx.points} đ
+                        {formatPointsDelta(tx.points)} đ
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right text-slate-700 font-mono">

@@ -1,16 +1,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp } from 'lucide-react';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
-import { ChartDataPoint } from '@/types/database';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { ChartDataPoint, ChartPeriod } from '@/types/database';
+
+const PERIOD_LABELS: Record<ChartPeriod, string> = {
+  '7d': '7 ngày',
+  '30d': '30 ngày',
+  '12m': '12 tháng',
+};
 
 export function PointChart() {
-  const [period, setPeriod] = useState<'7d' | '30d' | '12m'>('7d');
+  const [period, setPeriod] = useState<ChartPeriod>('7d');
   const [data, setData] = useState<ChartDataPoint[]>([]);
 
   useEffect(() => {
-    loyaltyStore.getChartData(period).then(setData);
+    loyaltyApi.getChartData(period).then(setData).catch(() => setData([]));
   }, [period]);
 
   // Find maximum value for SVG scaling
@@ -42,7 +47,7 @@ export function PointChart() {
                 period === p ? 'bg-white text-slate-900 shadow-xs font-bold' : 'hover:text-slate-900'
               }`}
             >
-              {p === '7d' ? '7 ngày' : p === '30d' ? '30 ngày' : '12 tháng'}
+              {PERIOD_LABELS[p]}
             </button>
           ))}
         </div>
@@ -66,13 +71,13 @@ export function PointChart() {
 
       {/* Modern Bars Graphic */}
       <div className="h-64 flex items-end gap-2 sm:gap-4 pt-6 border-b border-slate-100">
-        {data.map((item, idx) => {
+        {data.map((item) => {
           const earnedHeight = Math.max((item.earned / maxValue) * 180, 4);
           const redeemedHeight = Math.max((item.redeemed / maxValue) * 180, 0);
           const expiredHeight = Math.max((item.expired / maxValue) * 180, 0);
 
           return (
-            <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+            <div key={item.date} className="flex-1 flex flex-col items-center h-full justify-end group relative">
               {/* Tooltip on hover */}
               <div className="absolute -top-12 z-20 hidden group-hover:flex flex-col items-center bg-slate-900 text-white text-[11px] py-1 px-2.5 rounded-lg shadow-lg pointer-events-none whitespace-nowrap">
                 <span className="font-bold text-slate-200">{item.label}</span>

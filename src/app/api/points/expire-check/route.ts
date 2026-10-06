@@ -1,19 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse } from '@/lib/server/api-response';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request, ['ADMIN']);
+  if (auth.response) return auth.response;
+
   try {
-    const result = await loyaltyStore.checkAndExpireLots();
-    return NextResponse.json({
-      success: true,
-      lotsExpired: result.lotsExpired,
-      totalPointsExpired: result.totalPointsExpired,
-      message: `Đã xử lý hết hạn ${result.lotsExpired} lô điểm (tổng ${result.totalPointsExpired} điểm)`,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi quét kiểm tra điểm hết hạn' },
-      { status: 500 }
-    );
+    return NextResponse.json(await loyaltyStore.checkAndExpireLots(auth.user));
+  } catch (err) {
+    return errorResponse(err, 'Lỗi quét kiểm tra điểm hết hạn', 500);
   }
 }

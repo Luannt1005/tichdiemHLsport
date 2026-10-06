@@ -4,21 +4,14 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Lock,
   User,
   ShieldCheck,
-  UserCheck,
   UserPlus,
   Mail,
-  CheckCircle2,
   AlertCircle,
-  Eye,
-  EyeOff,
   LogIn,
 } from 'lucide-react';
 import { authStore } from '@/lib/auth/auth-store';
-import { activityLogService } from '@/lib/services/activity-log-service';
-import { UserRole } from '@/types/database';
 import { useToast } from '@/components/ui/Toast';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -31,8 +24,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('STAFF');
-  const [showPassword, setShowPassword] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,28 +61,19 @@ export default function RegisterPage() {
         name,
         email: email || undefined,
         password,
-        role,
       });
 
-      if (res.success && res.user) {
-        await activityLogService.logActivity(
-          'USER_REGISTER',
-          'AUTH',
-          res.user.id,
-          `Tạo tài khoản mới: ${res.user.name} (@${res.user.username}) với vai trò ${res.user.role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'}`,
-          { role: res.user.role, username: res.user.username, name: res.user.name }
-        );
-
+      if (res.success) {
         success(
-          'Tạo tài khoản thành công',
-          `Chào mừng ${res.user.name}! Đã tự động đăng nhập vào hệ thống.`
+          'Đăng ký thành công',
+          'Tài khoản đang chờ Quản trị viên duyệt. Bạn có thể đăng nhập sau khi được kích hoạt.'
         );
-        router.push('/customers');
+        router.push('/login');
       } else {
         setErrorMsg(res.error || 'Không thể tạo tài khoản');
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Có lỗi xảy ra khi tạo tài khoản');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Có lỗi xảy ra khi tạo tài khoản');
     } finally {
       setLoading(false);
     }
@@ -186,7 +168,7 @@ export default function RegisterPage() {
                 Mật khẩu <span className="text-rose-500">*</span>
               </label>
               <input
-                type={showPassword ? 'text' : 'password'}
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Ít nhất 6 ký tự"
@@ -200,7 +182,7 @@ export default function RegisterPage() {
                 Xác nhận lại <span className="text-rose-500">*</span>
               </label>
               <input
-                type={showPassword ? 'text' : 'password'}
+                type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Nhập lại mật khẩu"
@@ -210,50 +192,12 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Role Selection */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Vai trò <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setRole('STAFF')}
-                className={`p-2.5 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                  role === 'STAFF'
-                    ? 'border-blue-500 bg-blue-50 text-blue-900 font-bold'
-                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <div className="text-xs font-bold">Thu Ngân</div>
-                    <div className="text-[10px] text-slate-500">Tích & đổi điểm</div>
-                  </div>
-                </div>
-                {role === 'STAFF' && <CheckCircle2 className="w-4 h-4 text-blue-600" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setRole('ADMIN')}
-                className={`p-2.5 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                  role === 'ADMIN'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold'
-                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <div>
-                    <div className="text-xs font-bold">Quản Trị</div>
-                    <div className="text-[10px] text-slate-500">Toàn quyền hệ thống</div>
-                  </div>
-                </div>
-                {role === 'ADMIN' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-              </button>
-            </div>
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5 text-blue-800 text-xs">
+            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
+            <span>
+              Tài khoản mới có vai trò <strong>Thu ngân</strong> và cần <strong>Quản trị viên duyệt</strong> trước khi
+              đăng nhập được.
+            </span>
           </div>
 
           <button

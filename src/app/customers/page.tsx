@@ -3,34 +3,29 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  Users,
   Search,
-  Plus,
   UserPlus,
   ArrowRight,
   PlusCircle,
   MinusCircle,
-  Phone,
-  Mail,
-  Calendar,
-  Filter,
-  CheckCircle2,
-  ClockAlert,
-  Edit2,
 } from 'lucide-react';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
-import { Customer } from '@/types/database';
-import { formatDateOnly, formatDateTime, isValidVietnamesePhone, normalizePhone } from '@/lib/points-engine';
+import { createPortal } from 'react-dom';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { formatDateOnly, isValidVietnamesePhone, normalizePhone } from '@/lib/points-engine';
+import { useMounted } from '@/lib/hooks/use-mounted';
 import { EarnPointsModal } from '@/components/pos/EarnPointsModal';
 import { RedeemPointsModal } from '@/components/pos/RedeemPointsModal';
-import { createPortal } from 'react-dom';
 import { useToast } from '@/components/ui/Toast';
+import { Customer, CustomerFilter } from '@/types/database';
 
 export default function CustomersPage() {
   const { success, error } = useToast();
+  const mounted = useMounted();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [totalCustomers, setTotalCustomers] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('ALL');
+  const [filter, setFilter] = useState<CustomerFilter>('ALL');
   const [loading, setLoading] = useState(true);
 
   // Pagination state (max 20 per page)
@@ -47,20 +42,35 @@ export default function CustomersPage() {
   const [isEarnOpen, setIsEarnOpen] = useState(false);
   const [isRedeemOpen, setIsRedeemOpen] = useState(false);
 
-  const loadCustomers = async () => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadCustomers = () => {
     setLoading(true);
-    const list = await loyaltyStore.getCustomers(search, filter);
-    setCustomers(list);
-    setLoading(false);
+    setReloadKey((k) => k + 1);
   };
 
   useEffect(() => {
-    loadCustomers();
-    setCurrentPage(1);
-  }, [search, filter]);
+    let cancelled = false;
+    setLoading(true);
+    loyaltyApi.getCustomers(search, filter, currentPage, PAGE_SIZE)
+      .then((data) => {
+        if (!cancelled) {
+          setCustomers(data.customers);
+          setTotalCustomers(data.total);
+          setTotalPages(data.totalPages || 1);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) error('Không tải được danh sách khách hàng', err instanceof Error ? err.message : '');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search, filter, currentPage, reloadKey, error]);
 
-  const totalPages = Math.ceil(customers.length / PAGE_SIZE) || 1;
-  const paginatedCustomers = customers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paginatedCustomers = customers;
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,15 +81,19 @@ export default function CustomersPage() {
     }
 
     try {
-      await loyaltyStore.createCustomer(formattedPhone, newName.trim(), newEmail.trim() || undefined);
+      await loyaltyApi.createCustomer({
+        phone: formattedPhone,
+        name: newName.trim(),
+        email: newEmail.trim() || undefined,
+      });
       success('Thành công', `Đã thêm khách hàng ${newName}`);
       setIsAddOpen(false);
       setNewName('');
       setNewPhone('');
       setNewEmail('');
-      await loadCustomers();
-    } catch (err: any) {
-      error('Lỗi tạo khách', err.message);
+      loadCustomers();
+    } catch (err) {
+      error('Lỗi tạo khách', err instanceof Error ? err.message : 'Không thể tạo khách hàng');
     }
   };
 
@@ -92,7 +106,11 @@ export default function CustomersPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+              setLoading(true);
+            }}
             placeholder="Tìm theo tên hoặc số điện thoại..."
             className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
           />
@@ -110,7 +128,11 @@ export default function CustomersPage() {
           ].map((f) => (
             <button
               key={f.key}
-              onClick={() => setFilter(f.key)}
+              onClick={() => {
+                setFilter(f.key as CustomerFilter);
+                setCurrentPage(1);
+                setLoading(true);
+              }}
               className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
                 filter === f.key
                   ? 'bg-slate-900 text-white shadow-xs font-bold'
@@ -134,13 +156,15 @@ export default function CustomersPage() {
 
       {/* Customer Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        {loading ? (
+        {loading && (
           <div className="py-12 text-center text-xs text-slate-400">Đang tải danh sách...</div>
-        ) : customers.length === 0 ? (
+        )}
+        {!loading && customers.length === 0 && (
           <div className="py-12 text-center text-xs text-slate-500">
             Không tìm thấy khách hàng nào khớp với điều kiện tìm kiếm.
           </div>
-        ) : (
+        )}
+        {!loading && customers.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
@@ -240,24 +264,36 @@ export default function CustomersPage() {
             <div className="text-xs text-slate-500 font-medium">
               Hiển thị <span className="font-bold text-slate-800">{(currentPage - 1) * PAGE_SIZE + 1}</span> -{' '}
               <span className="font-bold text-slate-800">
-                {Math.min(currentPage * PAGE_SIZE, customers.length)}
+                {Math.min(currentPage * PAGE_SIZE, totalCustomers)}
               </span>{' '}
-              trong tổng số <span className="font-bold text-slate-800">{customers.length}</span> hội viên
+              trong tổng số <span className="font-bold text-slate-800">{totalCustomers}</span> hội viên
             </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+                disabled={currentPage === 1 || loading}
                 className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 Trước
               </button>
               {Array.from({ length: totalPages }).map((_, idx) => {
                 const pageNum = idx + 1;
+                if (
+                  totalPages > 7 &&
+                  pageNum !== 1 &&
+                  pageNum !== totalPages &&
+                  Math.abs(pageNum - currentPage) > 1
+                ) {
+                  if (pageNum === 2 || pageNum === totalPages - 1) {
+                    return <span key={pageNum} className="px-1 text-slate-400">...</span>;
+                  }
+                  return null;
+                }
                 return (
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
+                    disabled={loading}
                     className={`min-w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all ${
                       currentPage === pageNum
                         ? 'bg-emerald-600 text-white shadow-xs'
@@ -270,7 +306,7 @@ export default function CustomersPage() {
               })}
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
+                disabled={currentPage === totalPages || loading}
                 className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 Sau
@@ -282,7 +318,7 @@ export default function CustomersPage() {
 
       {/* Add Customer Modal */}
       {isAddOpen &&
-        typeof document !== 'undefined' &&
+        mounted &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/20 backdrop-blur-[2px] animate-fade-in overflow-y-auto">
             <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden my-auto animate-scale-in">

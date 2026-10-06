@@ -12,7 +12,6 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { authStore } from '@/lib/auth/auth-store';
-import { activityLogService } from '@/lib/services/activity-log-service';
 import { useToast } from '@/components/ui/Toast';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
@@ -46,21 +45,13 @@ export default function LoginPage() {
     try {
       const res = await authStore.login(username, password);
       if (res.success && res.user) {
-        await activityLogService.logActivity(
-          'LOGIN',
-          'AUTH',
-          res.user.id,
-          `Đăng nhập thành công với tài khoản ${res.user.name} (${res.user.role === 'ADMIN' ? 'Quản trị viên' : 'Thu ngân'})`,
-          { role: res.user.role, username: res.user.username }
-        );
-
         success('Đăng nhập thành công', `Chào mừng ${res.user.name} trở lại hệ thống!`);
         router.push('/customers');
       } else {
         setErrorMsg(res.error || 'Tên đăng nhập hoặc mật khẩu không chính xác');
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Có lỗi xảy ra khi đăng nhập');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Có lỗi xảy ra khi đăng nhập');
     } finally {
       setLoading(false);
     }

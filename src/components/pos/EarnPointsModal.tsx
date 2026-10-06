@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { PlusCircle, Calculator, Calendar, X, Sparkles, User, Info } from 'lucide-react';
-import { loyaltyStore, DEFAULT_SETTING } from '@/lib/store/loyalty-store';
-import { calculatePoints, calculateBonusPoints, calculateExpiryDate, formatVND, formatDateOnly, isValidVietnamesePhone } from '@/lib/points-engine';
-import { PointSetting, Customer } from '@/types/database';
-import { useToast } from '@/components/ui/Toast';
+import { Calculator, Calendar, X, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useMounted } from '@/lib/hooks/use-mounted';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { DEFAULT_SETTING, calculatePoints, calculateBonusPoints, calculateExpiryDate, formatVND, formatDateOnly, isValidVietnamesePhone } from '@/lib/points-engine';
+import { useToast } from '@/components/ui/Toast';
+import { PointSetting, Customer } from '@/types/database';
 
 interface EarnPointsModalProps {
   isOpen: boolean;
@@ -25,61 +26,76 @@ export function EarnPointsModal({
   initialPhone = '',
 }: EarnPointsModalProps) {
   const { success, error } = useToast();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [phone, setPhone] = useState(initialPhone || initialCustomer?.phone || '');
   const [name, setName] = useState(initialCustomer?.name || '');
   const [amountK, setAmountK] = useState<number | string>(200);
   const [description, setDescription] = useState('Thanh toán tiền thuê sân');
-  const [referenceType, setReferenceType] = useState('BOOKING');
-  const [referenceId, setReferenceId] = useState('');
+  const [referenceType] = useState('BOOKING');
+  const [referenceId] = useState('');
   const [setting, setSetting] = useState<PointSetting>(DEFAULT_SETTING);
   const [existingCustomer, setExistingCustomer] = useState<Customer | null>(initialCustomer || null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  // Reset form mỗi lần mở modal
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
     if (isOpen) {
-      loyaltyStore.getPointSettings().then(setSetting);
-      if (initialCustomer) {
-        setExistingCustomer(initialCustomer);
-        setPhone(initialCustomer.phone);
-        setName(initialCustomer.name);
-      } else if (initialPhone) {
-        setPhone(initialPhone);
-      }
+      setExistingCustomer(initialCustomer || null);
+      setPhone(initialCustomer?.phone || initialPhone || '');
+      setName(initialCustomer?.name || '');
     }
-  }, [isOpen, initialCustomer, initialPhone]);
+  }
 
-  // Lookup customer by phone when phone changes and initialCustomer is not set
   useEffect(() => {
-    if (initialCustomer) return;
+    if (!isOpen) return;
+    let cancelled = false;
+    loyaltyApi
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setSetting(s);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
-    if (phone.trim().length >= 9) {
-      loyaltyStore.getCustomerByPhone(phone).then((cust) => {
-        if (cust) {
-          setExistingCustomer(cust);
-          setName(cust.name);
-        } else {
-          setExistingCustomer(null);
-          setName('');
-        }
+  // Tra khách theo SĐT khi chưa chọn sẵn khách (state chỉ đặt trong callback)
+  useEffect(() => {
+    if (!isOpen || initialCustomer || phone.trim().length < 9) return;
+    let cancelled = false;
+    loyaltyApi
+      .getCustomerByPhone(phone)
+      .then((cust) => {
+        if (cancelled) return;
+        setExistingCustomer(cust);
+        setName(cust?.name ?? '');
+      })
+      .catch(() => {
+        if (!cancelled) setExistingCustomer(null);
       });
-    } else {
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, phone, initialCustomer]);
+
+  const handlePhoneChange = (value: string) => {
+    setPhone(value);
+    if (value.trim().length < 9) {
       setExistingCustomer(null);
       setName('');
     }
-  }, [phone, initialCustomer]);
+  };
 
   if (!isOpen || !mounted) return null;
 
   const activeCustomer = initialCustomer || existingCustomer;
 
-  const numK = typeof amountK === 'string' ? (amountK === '' ? 0 : Number(amountK)) : amountK;
+  const numK = amountK === '' ? 0 : Number(amountK);
   const amount = numK * 1000;
 
   const basePoints = calculatePoints(
@@ -111,7 +127,7 @@ export function EarnPointsModal({
 
     setLoading(true);
     try {
-      const result = await loyaltyStore.earnPoints({
+      const result = await loyaltyApi.earnPoints({
         phone: finalPhone,
         name: activeCustomer ? activeCustomer.name : name.trim() || undefined,
         amount,
@@ -133,8 +149,8 @@ export function EarnPointsModal({
 
       if (onSuccess) onSuccess();
       onClose();
-    } catch (err: any) {
-      error('Lỗi tích điểm', err.message || 'Không thể thực hiện tích điểm');
+    } catch (err) {
+      error('Lỗi tích điểm', err instanceof Error ? err.message : 'Không thể thực hiện tích điểm');
     } finally {
       setLoading(false);
     }
@@ -178,11 +194,7 @@ export function EarnPointsModal({
                 <div className="mt-2.5 pt-2.5 border-t border-emerald-100/80 flex justify-end text-[11px]">
                   <button
                     type="button"
-                    onClick={() => {
-                      setExistingCustomer(null);
-                      setPhone('');
-                      setName('');
-                    }}
+                    onClick={() => handlePhoneChange('')}
                     className="text-emerald-700 hover:underline font-semibold"
                   >
                     Đổi khách khác
@@ -200,7 +212,7 @@ export function EarnPointsModal({
                 <input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
                   placeholder="VD: 0901234567"
                   required
                   autoFocus

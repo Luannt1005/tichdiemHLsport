@@ -1,17 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse } from '@/lib/server/api-response';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const days = searchParams.get('days') ? Number(searchParams.get('days')) : 30;
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
 
-    const expiringLots = await loyaltyStore.getExpiringLots(days);
-    return NextResponse.json(expiringLots);
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi lấy danh sách lô điểm sắp hết hạn' },
-      { status: 500 }
-    );
+  try {
+    const days = Number(request.nextUrl.searchParams.get('days')) || 30;
+    return NextResponse.json(await loyaltyStore.getExpiringLots(days));
+  } catch (err) {
+    return errorResponse(err, 'Lỗi lấy danh sách lô điểm sắp hết hạn', 500);
   }
 }

@@ -44,17 +44,30 @@ export interface AppUser {
   created_at: string;
 }
 
+/** Người thực hiện thao tác — lấy từ session phía server, không nhận từ client */
+export type Actor = Pick<AppUser, 'id' | 'username' | 'name' | 'role'>;
+
+export type ActivityEntityType = 'AUTH' | 'CUSTOMER' | 'POINT_TRANSACTION' | 'POINT_SETTING';
+
 export interface ActivityLog {
   id: string;
   user_id?: string | null;
   username: string;
   user_role: UserRole;
   action: ActivityAction;
-  entity_type: 'AUTH' | 'CUSTOMER' | 'POINT_TRANSACTION' | 'POINT_SETTING';
+  entity_type: ActivityEntityType;
   entity_id?: string | null;
   description: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   created_at: string;
+}
+
+export interface ActivityLogFilter {
+  action?: string;
+  role?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface Customer {
@@ -146,3 +159,133 @@ export interface ChartDataPoint {
   redeemed: number;
   expired: number;
 }
+
+export type ChartPeriod = '7d' | '30d' | '12m';
+
+export type CustomerFilter = 'ALL' | 'HAS_POINTS' | 'NO_POINTS' | 'EXPIRING_SOON' | 'EXPIRED';
+
+export type ExpiringLot = PointLot & { customer?: Customer };
+
+export interface CustomerDetail extends Customer {
+  lots: PointLot[];
+  transactions: PointTransaction[];
+}
+
+/** Các trường cấu hình ADMIN được phép sửa */
+export type PointSettingUpdate = Partial<
+  Pick<
+    PointSetting,
+    'amount_per_point' | 'points_per_amount' | 'cash_per_point' | 'expiry_days' | 'bonus_tiers'
+  >
+>;
+
+export interface EarnPointsInput {
+  phone: string;
+  amount: number;
+  name?: string;
+  description?: string;
+  referenceType?: string;
+  referenceId?: string;
+}
+
+export interface EarnPointsResult {
+  success: true;
+  pointsEarned: number;
+  newTotalPoints: number;
+  customer: Customer;
+  transaction: PointTransaction;
+  lot: PointLot;
+}
+
+export interface RedeemPointsInput {
+  customerId: string;
+  points: number;
+  description?: string;
+  referenceType?: string;
+  referenceId?: string;
+}
+
+export interface RedeemPointsResult {
+  success: true;
+  pointsRedeemed: number;
+  newTotalPoints: number;
+  customer: Customer;
+  transaction: PointTransaction;
+  allocations: PointRedemptionAllocation[];
+}
+
+export interface AdjustPointsInput {
+  customerId: string;
+  pointsDelta: number;
+  reason: string;
+}
+
+export interface AdjustPointsResult {
+  success: true;
+  pointsDelta: number;
+  newTotalPoints: number;
+  customer: Customer;
+  transaction: PointTransaction;
+}
+
+export interface ExpireCheckResult {
+  success: true;
+  lotsExpired: number;
+  totalPointsExpired: number;
+  message: string;
+}
+
+export interface CreateUserInput {
+  username: string;
+  name: string;
+  email?: string;
+  password: string;
+  role?: UserRole;
+}
+
+export interface UserListResult {
+  users: AppUser[];
+  databaseReady: boolean;
+}
+
+/** Dữ liệu tối thiểu trả cho trang tra cứu công khai (không lộ email, id nội bộ, người thao tác) */
+export interface PublicLookupResult {
+  success: true;
+  customer: Pick<
+    Customer,
+    'name' | 'phone' | 'total_points' | 'lifetime_points_used' | 'expiring_soon_points'
+  >;
+  lots: Pick<
+    PointLot,
+    'id' | 'original_points' | 'remaining_points' | 'earned_at' | 'expires_at' | 'days_left'
+  >[];
+  transactions: Pick<
+    PointTransaction,
+    'id' | 'type' | 'points' | 'amount' | 'description' | 'created_at'
+  >[];
+  settings: {
+    amount_per_point: number;
+    points_per_amount: number;
+    cash_per_point: number;
+    expiry_days: number;
+  };
+  cash_value: number;
+  total_amount_paid: number;
+}
+
+export interface PaginatedCustomers {
+  customers: Customer[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface PaginatedTransactions {
+  transactions: PointTransaction[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+

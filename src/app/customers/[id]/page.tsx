@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
-  User,
   Phone,
   Mail,
   Award,
@@ -24,25 +23,28 @@ import {
   Trash2,
   AlertTriangle,
 } from 'lucide-react';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
-import { Customer, PointLot, PointTransaction, UserRole } from '@/types/database';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { useCurrentUser } from '@/lib/auth/auth-store';
 import { formatDateOnly, formatDateTime, formatVND } from '@/lib/points-engine';
+import { LOT_STATUS_STYLES, TRANSACTION_TYPE_STYLES, formatPointsDelta, pointsTextClass } from '@/lib/transaction-display';
+import { useMounted } from '@/lib/hooks/use-mounted';
 import { EarnPointsModal } from '@/components/pos/EarnPointsModal';
 import { RedeemPointsModal } from '@/components/pos/RedeemPointsModal';
 import { EditCustomerModal } from '@/components/modals/EditCustomerModal';
 import { useToast } from '@/components/ui/Toast';
+import { Customer, PointLot, PointTransaction, UserRole } from '@/types/database';
 
 export default function CustomerDetailPage() {
   const params = useParams();
   const router = useRouter();
   const customerId = params.id as string;
   const { success, error } = useToast();
+  const mounted = useMounted();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [lots, setLots] = useState<PointLot[]>([]);
   const [transactions, setTransactions] = useState<PointTransaction[]>([]);
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'LOTS' | 'HISTORY'>('OVERVIEW');
-  const [role, setRole] = useState<UserRole>('ADMIN');
 
   // Modals
   const [isEarnOpen, setIsEarnOpen] = useState(false);
@@ -54,27 +56,34 @@ export default function CustomerDetailPage() {
   const [adjustPoints, setAdjustPoints] = useState<number>(50);
   const [adjustReason, setAdjustReason] = useState('Thưởng điểm tri ân khách hàng thân thiết');
 
-  const loadCustomerData = async () => {
-    if (!customerId) return;
-    const c = await loyaltyStore.getCustomerById(customerId);
-    if (!c) return;
-    setCustomer(c);
-    const l = await loyaltyStore.getCustomerLots(customerId);
-    setLots(l);
-    const t = await loyaltyStore.getTransactions({ customerId });
-    setTransactions(t);
-    setRole(loyaltyStore.getRole());
-  };
+  const role: UserRole = useCurrentUser()?.role ?? 'STAFF';
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadCustomerData = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    loadCustomerData();
-  }, [customerId]);
+    if (!customerId) return;
+    let cancelled = false;
+    loyaltyApi
+      .getCustomer(customerId)
+      .then(({ lots: customerLots, transactions: customerTransactions, ...c }) => {
+        if (cancelled) return;
+        setCustomer(c);
+        setLots(customerLots);
+        setTransactions(customerTransactions);
+      })
+      .catch((err) => {
+        if (!cancelled) error('Không tải được thông tin khách hàng', err instanceof Error ? err.message : '');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, reloadKey, error]);
 
   const handleAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
     try {
-      await loyaltyStore.adjustPoints({
+      await loyaltyApi.adjustPoints({
         customerId: customer.id,
         pointsDelta: adjustPoints,
         reason: adjustReason,
@@ -82,8 +91,8 @@ export default function CustomerDetailPage() {
       success('Thành công', `Đã điều chỉnh ${adjustPoints > 0 ? `+${adjustPoints}` : adjustPoints} điểm`);
       setIsAdjustOpen(false);
       loadCustomerData();
-    } catch (err: any) {
-      error('Lỗi điều chỉnh', err.message);
+    } catch (err) {
+      error('Lỗi điều chỉnh', err instanceof Error ? err.message : 'Không thể điều chỉnh điểm');
     }
   };
 
@@ -91,15 +100,12 @@ export default function CustomerDetailPage() {
     if (!customer) return;
     setIsDeleting(true);
     try {
-      await loyaltyStore.deleteCustomer(customer.id);
-      try {
-        await fetch(`/api/customers/${customer.id}`, { method: 'DELETE' });
-      } catch (_) {}
+      await loyaltyApi.deleteCustomer(customer.id);
       success('Đã xóa khách hàng', `Khách hàng ${customer.name} đã được xóa thành công.`);
       setIsDeleteOpen(false);
       router.push('/customers');
-    } catch (err: any) {
-      error('Lỗi khi xóa khách hàng', err.message || 'Không thể xóa khách hàng này.');
+    } catch (err) {
+      error('Lỗi khi xóa khách hàng', err instanceof Error ? err.message : 'Không thể xóa khách hàng này.');
     } finally {
       setIsDeleting(false);
     }
@@ -424,19 +430,9 @@ export default function CustomerDetailPage() {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          lot.status === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : lot.status === 'EXPIRED'
-                            ? 'bg-rose-100 text-rose-800'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${LOT_STATUS_STYLES[lot.status].badgeClass}`}
                       >
-                        {lot.status === 'ACTIVE'
-                          ? 'Khả dụng'
-                          : lot.status === 'EXPIRED'
-                          ? 'Đã hết hạn'
-                          : 'Đã dùng hết'}
+                        {LOT_STATUS_STYLES[lot.status].label}
                       </span>
                     </td>
                   </tr>
@@ -474,30 +470,16 @@ export default function CustomerDetailPage() {
                     </td>
                     <td className="py-3 px-4">
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          tx.type === 'EARN'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : tx.type === 'REDEEM'
-                            ? 'bg-rose-100 text-rose-800'
-                            : tx.type === 'EXPIRE'
-                            ? 'bg-slate-200 text-slate-700'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${TRANSACTION_TYPE_STYLES[tx.type].badgeClass}`}
                       >
-                        {tx.type}
+                        {TRANSACTION_TYPE_STYLES[tx.type].label}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-black">
                       <span
-                        className={
-                          tx.points > 0
-                            ? 'text-emerald-600'
-                            : tx.points < 0
-                            ? 'text-rose-600'
-                            : 'text-slate-600'
-                        }
+                        className={pointsTextClass(tx)}
                       >
-                        {tx.points > 0 ? `+${tx.points}` : tx.points} đ
+                        {formatPointsDelta(tx.points)} đ
                       </span>
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-semibold">
@@ -519,7 +501,7 @@ export default function CustomerDetailPage() {
 
       {/* Adjust Points Modal (Portal) */}
       {isAdjustOpen &&
-        typeof document !== 'undefined' &&
+        mounted &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/30 backdrop-blur-xs animate-fade-in overflow-y-auto">
             <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden my-auto animate-scale-in">
@@ -596,10 +578,14 @@ export default function CustomerDetailPage() {
           setCustomer(updated);
           loadCustomerData();
         }}
-        onDelete={() => {
-          setIsEditOpen(false);
-          setIsDeleteOpen(true);
-        }}
+        onDelete={
+          role === 'ADMIN'
+            ? () => {
+                setIsEditOpen(false);
+                setIsDeleteOpen(true);
+              }
+            : undefined
+        }
       />
 
       {/* Modals for earn / redeem */}
@@ -619,7 +605,7 @@ export default function CustomerDetailPage() {
 
       {/* Delete Confirmation Modal */}
       {isDeleteOpen &&
-        typeof document !== 'undefined' &&
+        mounted &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/30 backdrop-blur-xs animate-fade-in overflow-y-auto">
             <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden my-auto animate-scale-in">

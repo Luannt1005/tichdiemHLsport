@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { MinusCircle, Coins, AlertCircle, ArrowRight, Check, X, ShieldAlert, Sparkles, Info } from 'lucide-react';
-import { loyaltyStore, DEFAULT_SETTING } from '@/lib/store/loyalty-store';
-import { formatVND, formatDateOnly } from '@/lib/points-engine';
-import { PointSetting, Customer, PointLot } from '@/types/database';
+import { AlertCircle, ArrowRight, Check, X, ShieldAlert } from 'lucide-react';
+import { useMounted } from '@/lib/hooks/use-mounted';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { DEFAULT_SETTING, formatVND, formatDateOnly } from '@/lib/points-engine';
 import { useToast } from '@/components/ui/Toast';
+import { PointSetting, Customer, PointLot } from '@/types/database';
 
 interface RedeemPointsModalProps {
   isOpen: boolean;
@@ -24,57 +25,87 @@ export function RedeemPointsModal({
   initialPhone = '',
 }: RedeemPointsModalProps) {
   const { success, error } = useToast();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
 
   const [phone, setPhone] = useState(initialPhone || initialCustomer?.phone || '');
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer || null);
   const [lots, setLots] = useState<PointLot[]>([]);
   const [pointsToRedeem, setPointsToRedeem] = useState<number | string>(50);
   const [description, setDescription] = useState('Khấu trừ thanh toán tiền sân');
-  const [referenceType, setReferenceType] = useState('BOOKING');
-  const [referenceId, setReferenceId] = useState('');
+  const [referenceType] = useState('BOOKING');
+  const [referenceId] = useState('');
   const [setting, setSetting] = useState<PointSetting>(DEFAULT_SETTING);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  // Reset form mỗi lần mở modal
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
     if (isOpen) {
-      loyaltyStore.getPointSettings().then(setSetting);
       setShowConfirm(false);
-
-      if (initialCustomer) {
-        setCustomer(initialCustomer);
-        setPhone(initialCustomer.phone);
-        loyaltyStore.getCustomerLots(initialCustomer.id).then(setLots);
-      } else if (initialPhone) {
-        setPhone(initialPhone);
-      }
+      setCustomer(initialCustomer || null);
+      setPhone(initialCustomer?.phone || initialPhone || '');
+      setLots([]);
     }
-  }, [isOpen, initialCustomer, initialPhone]);
+  }
 
-  // Lookup customer by phone if not pre-provided
   useEffect(() => {
-    if (initialCustomer) return;
+    if (!isOpen) return;
+    let cancelled = false;
+    loyaltyApi
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setSetting(s);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
-    if (phone.trim().length >= 9) {
-      loyaltyStore.getCustomerByPhone(phone).then((cust) => {
-        if (cust) {
-          setCustomer(cust);
-          loyaltyStore.getCustomerLots(cust.id).then(setLots);
-        } else {
-          setCustomer(null);
-          setLots([]);
-        }
+  // Tra khách theo SĐT khi chưa chọn sẵn khách
+  useEffect(() => {
+    if (!isOpen || initialCustomer || phone.trim().length < 9) return;
+    let cancelled = false;
+    loyaltyApi
+      .getCustomerByPhone(phone)
+      .then((cust) => {
+        if (!cancelled) setCustomer(cust);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomer(null);
       });
-    } else {
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, phone, initialCustomer]);
+
+  // Tải các lô điểm của khách đang chọn (để hiển thị thứ tự trừ FEFO)
+  const customerId = customer?.id;
+  useEffect(() => {
+    if (!isOpen || !customerId) return;
+    let cancelled = false;
+    loyaltyApi
+      .getCustomer(customerId)
+      .then((detail) => {
+        if (!cancelled) setLots(detail.lots);
+      })
+      .catch(() => {
+        if (!cancelled) setLots([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, customerId]);
+
+  const handlePhoneChange = (value: string) => {
+    setPhone(value);
+    if (value.trim().length < 9) {
       setCustomer(null);
       setLots([]);
     }
-  }, [phone, initialCustomer]);
+  };
 
   if (!isOpen || !mounted) return null;
 
@@ -82,9 +113,7 @@ export function RedeemPointsModal({
   const activeLots = lots.filter((l) => l.status === 'ACTIVE' && l.remaining_points > 0);
 
   // Parse giá trị hiển thị thành số thực để tính toán
-  const numPointsToRedeem = typeof pointsToRedeem === 'string'
-    ? (pointsToRedeem === '' ? 0 : Number(pointsToRedeem))
-    : pointsToRedeem;
+  const numPointsToRedeem = pointsToRedeem === '' ? 0 : Number(pointsToRedeem);
 
   // Estimate FEFO allocation preview
   const previewAllocations: { lot: PointLot; deduct: number }[] = [];
@@ -96,12 +125,6 @@ export function RedeemPointsModal({
     remainingNeed -= deduct;
   }
 
-  const handleQuickPercent = (percent: number) => {
-    if (!customer) return;
-    const pts = Math.floor((currentBalance * percent) / 100);
-    setPointsToRedeem(String(Math.max(1, pts)));
-  };
-
   const handleConfirmRedeem = async () => {
     if (!customer) return;
     if (numPointsToRedeem <= 0 || numPointsToRedeem > currentBalance || !Number.isInteger(numPointsToRedeem)) {
@@ -111,7 +134,7 @@ export function RedeemPointsModal({
 
     setLoading(true);
     try {
-      const res = await loyaltyStore.redeemPoints({
+      const res = await loyaltyApi.redeemPoints({
         customerId: customer.id,
         points: numPointsToRedeem,
         description,
@@ -121,14 +144,14 @@ export function RedeemPointsModal({
 
       success(
         'Trừ điểm thành công!',
-        `Đã trừ ${numPointsToRedeem} điểm của ${customer.name}. Số dư mới: ${res.newBalance} điểm.`
+        `Đã trừ ${numPointsToRedeem} điểm của ${customer.name}. Số dư mới: ${res.newTotalPoints} điểm.`
       );
 
       if (onSuccess) onSuccess();
       setShowConfirm(false);
       onClose();
-    } catch (err: any) {
-      error('Lỗi trừ điểm', err.message || 'Không thể thực hiện trừ điểm');
+    } catch (err) {
+      error('Lỗi trừ điểm', err instanceof Error ? err.message : 'Không thể thực hiện trừ điểm');
     } finally {
       setLoading(false);
     }
@@ -172,10 +195,7 @@ export function RedeemPointsModal({
                 <div className="mt-2.5 pt-2.5 border-t border-rose-100 flex justify-end text-[11px]">
                   <button
                     type="button"
-                    onClick={() => {
-                      setCustomer(null);
-                      setPhone('');
-                    }}
+                    onClick={() => handlePhoneChange('')}
                     className="text-rose-600 hover:underline font-semibold"
                   >
                     Đổi khách khác
@@ -191,7 +211,7 @@ export function RedeemPointsModal({
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => handlePhoneChange(e.target.value)}
                 placeholder="Nhập số điện thoại khách cần trừ điểm..."
                 autoFocus
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white transition-all"
@@ -199,12 +219,13 @@ export function RedeemPointsModal({
             </div>
           )}
 
-          {customer && currentBalance <= 0 ? (
+          {customer && currentBalance <= 0 && (
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
               <span>Khách hàng này hiện có <strong>0 điểm</strong>, không thể thực hiện giao dịch trừ điểm.</span>
             </div>
-          ) : customer ? (
+          )}
+          {customer && currentBalance > 0 && (
             <>
               {/* Points input */}
               <div>
@@ -293,7 +314,7 @@ export function RedeemPointsModal({
                 </div>
               )}
             </>
-          ) : null}
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center justify-end gap-3 pt-2">

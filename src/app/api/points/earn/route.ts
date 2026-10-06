@@ -1,48 +1,29 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse, optionalString, readJsonBody } from '@/lib/server/api-response';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+
   try {
-    const body = await request.json();
-    const { phone, amount, name, description, referenceType, referenceId, createdBy } = body;
-
-    if (!phone || typeof phone !== 'string' || !phone.trim()) {
-      return NextResponse.json(
-        { error: 'Số điện thoại khách hàng là bắt buộc' },
-        { status: 400 }
-      );
+    const body = await readJsonBody(request);
+    const phone = optionalString(body.phone);
+    if (!phone?.trim()) {
+      return NextResponse.json({ error: 'Số điện thoại khách hàng là bắt buộc' }, { status: 400 });
     }
 
-    const numAmount = Number(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      return NextResponse.json(
-        { error: 'Số tiền thanh toán phải lớn hơn 0' },
-        { status: 400 }
-      );
-    }
-
-    const result = await loyaltyStore.earnPoints({
-      phone: phone.trim(),
-      amount: numAmount,
-      name: name?.trim(),
-      description: description?.trim(),
-      referenceType,
-      referenceId,
-      createdBy,
+    const result = await loyaltyStore.earnPoints(auth.user, {
+      phone,
+      amount: Number(body.amount),
+      name: optionalString(body.name),
+      description: optionalString(body.description),
+      referenceType: optionalString(body.referenceType),
+      referenceId: optionalString(body.referenceId),
     });
-
-    return NextResponse.json({
-      success: true,
-      pointsEarned: result.pointsEarned,
-      newTotalPoints: result.customer.total_points,
-      customer: result.customer,
-      transaction: result.transaction,
-      lot: result.lot,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi xử lý cộng điểm' },
-      { status: 500 }
-    );
+    return NextResponse.json(result);
+  } catch (err) {
+    return errorResponse(err, 'Lỗi xử lý cộng điểm');
   }
 }

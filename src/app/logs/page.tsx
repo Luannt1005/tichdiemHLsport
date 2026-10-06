@@ -1,25 +1,21 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ScrollText,
   Search,
-  Filter,
   RefreshCw,
-  Calendar,
-  User,
-  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   Code2,
   X,
-  Clock,
-  Eye,
-  CheckCircle2,
 } from 'lucide-react';
-import { ActivityAction, ActivityLog, UserRole } from '@/types/database';
-import { activityLogService } from '@/lib/services/activity-log-service';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { useMounted } from '@/lib/hooks/use-mounted';
+import { formatDateOnly, formatTimeOnly } from '@/lib/points-engine';
 import { useToast } from '@/components/ui/Toast';
+import { ActivityAction, ActivityLog } from '@/types/database';
 
 const ACTION_MAP: Record<
   ActivityAction,
@@ -139,49 +135,39 @@ export default function LogsPage() {
 
   // Metadata Modal
   const [selectedLogForMeta, setSelectedLogForMeta] = useState<ActivityLog | null>(null);
+  const mounted = useMounted();
 
-  const loadLogs = useCallback(async () => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadLogs = () => {
     setLoading(true);
-    try {
-      const res = await activityLogService.getActivityLogs({
+    setReloadKey((k) => k + 1);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    loyaltyApi
+      .getActivityLogs({
         action: selectedAction,
         role: selectedRole,
         search,
         limit: pageSize,
         offset: (page - 1) * pageSize,
+      })
+      .then((res) => {
+        if (cancelled) return;
+        setLogs(res.logs);
+        setTotal(res.total);
+      })
+      .catch((err) => console.error('Không tải được nhật ký:', err))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      setLogs(res.logs);
-      setTotal(res.total);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedAction, selectedRole, search, page]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAction, selectedRole, search, page, reloadKey]);
 
-  useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
-
-  const formatDate = (isoStr: string) => {
-    try {
-      const d = new Date(isoStr);
-      return {
-        date: d.toLocaleDateString('vi-VN', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        }),
-        time: d.toLocaleTimeString('vi-VN', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        }),
-      };
-    } catch (_) {
-      return { date: isoStr, time: '' };
-    }
-  };
+  const formatDate = (isoStr: string) => ({ date: formatDateOnly(isoStr), time: formatTimeOnly(isoStr) });
 
   const totalPages = Math.ceil(total / pageSize) || 1;
 
@@ -235,6 +221,7 @@ export default function LogsPage() {
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
+              setLoading(true);
             }}
             placeholder="Tìm theo mô tả hành động, tài khoản, mã tham chiếu..."
             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white transition-all"
@@ -248,6 +235,7 @@ export default function LogsPage() {
             onChange={(e) => {
               setSelectedAction(e.target.value);
               setPage(1);
+              setLoading(true);
             }}
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
           >
@@ -276,6 +264,7 @@ export default function LogsPage() {
             onChange={(e) => {
               setSelectedRole(e.target.value);
               setPage(1);
+              setLoading(true);
             }}
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1B6C39] focus:bg-white"
           >
@@ -301,7 +290,7 @@ export default function LogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-              {loading ? (
+              {loading && (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-3">
@@ -312,13 +301,15 @@ export default function LogsPage() {
                     </div>
                   </td>
                 </tr>
-              ) : logs.length === 0 ? (
+              )}
+              {!loading && logs.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
                     Không tìm thấy nhật ký hoạt động nào phù hợp với bộ lọc
                   </td>
                 </tr>
-              ) : (
+              )}
+              {!loading && logs.length > 0 && (
                 logs.map((log) => {
                   const actionStyle =
                     ACTION_MAP[log.action] || {
@@ -439,7 +430,8 @@ export default function LogsPage() {
       </div>
 
       {/* Metadata JSON Modal */}
-      {selectedLogForMeta && (
+      {mounted && selectedLogForMeta &&
+        createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -487,8 +479,9 @@ export default function LogsPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -1,17 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse } from '@/lib/server/api-response';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
+import { ChartPeriod } from '@/types/database';
+
+const PERIODS: ChartPeriod[] = ['7d', '30d', '12m'];
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const period = (searchParams.get('period') as '7d' | '30d' | '12m') || '7d';
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
 
-    const chartData = await loyaltyStore.getChartData(period);
-    return NextResponse.json(chartData);
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi lấy dữ liệu biểu đồ' },
-      { status: 500 }
-    );
+  try {
+    const period = PERIODS.find((p) => p === request.nextUrl.searchParams.get('period')) ?? '7d';
+    return NextResponse.json(await loyaltyStore.getChartData(period));
+  } catch (err) {
+    return errorResponse(err, 'Lỗi lấy dữ liệu biểu đồ', 500);
   }
 }

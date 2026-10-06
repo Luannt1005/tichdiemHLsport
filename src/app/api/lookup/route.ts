@@ -1,23 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { errorResponse } from '@/lib/server/api-response';
+import { getClientIp, isRateLimited } from '@/lib/server/rate-limit';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
 
+/** API công khai cho khách tự tra cứu điểm — chỉ trả dữ liệu tối thiểu, có giới hạn tần suất */
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const phone = searchParams.get('phone');
+  if (isRateLimited(`lookup:${getClientIp(request)}`, 20, 60 * 1000)) {
+    return NextResponse.json(
+      { success: false, message: 'Bạn tra cứu quá nhanh, vui lòng thử lại sau ít phút.' },
+      { status: 429 }
+    );
+  }
 
-    if (!phone || !phone.trim()) {
+  try {
+    const phone = request.nextUrl.searchParams.get('phone')?.trim();
+    if (!phone) {
       return NextResponse.json(
         { success: false, message: 'Vui lòng nhập số điện thoại để tra cứu' },
         { status: 400 }
       );
     }
 
-    const cleaned = phone.replace(/[\s.-]/g, '');
-
-    // 1. Lấy thông tin khách hàng
-    const customer = await loyaltyStore.getCustomerByPhone(cleaned);
-    if (!customer) {
+    const result = await loyaltyStore.getPublicLookup(phone);
+    if (!result) {
       return NextResponse.json(
         {
           success: false,
@@ -26,58 +31,8 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       );
     }
-
-    // 2. Lấy các lô điểm đang còn hạn sử dụng
-    const lots = await loyaltyStore.getCustomerLots(customer.id);
-    const activeLots = lots.filter(
-      (l) => l.status === 'ACTIVE' && l.remaining_points > 0
-    );
-
-    // 3. Lấy lịch sử biến động điểm gần nhất
-    const transactions = await loyaltyStore.getTransactions({
-      customerId: customer.id,
-      limit: 15,
-    });
-
-    // 4. Lấy cấu hình điểm hiện hành để tính giá trị tiền mặt tương đương (1 điểm = cash_per_point VNĐ)
-    const settings = await loyaltyStore.getPointSettings();
-    const cashPerPoint = settings.cash_per_point || 1000;
-    const cashValue = Math.floor(customer.total_points * cashPerPoint);
-
-    // 5. Tính tổng số tiền khách đã thanh toán từ các hóa đơn tích điểm
-    const earnTransactions = await loyaltyStore.getTransactions({
-      customerId: customer.id,
-      type: 'EARN',
-      limit: 500,
-    });
-    const txTotal = earnTransactions.reduce(
-      (sum, tx) => sum + (Number(tx.amount) || 0),
-      0
-    );
-    const totalAmountPaid =
-      txTotal > 0
-        ? txTotal
-        : (customer.lifetime_points_earned || 0) * (settings.amount_per_point / settings.points_per_amount);
-
-    return NextResponse.json({
-      success: true,
-      customer,
-      lots: activeLots,
-      transactions,
-      settings: {
-        amount_per_point: settings.amount_per_point,
-        points_per_amount: settings.points_per_amount,
-        cash_per_point: cashPerPoint,
-        expiry_days: settings.expiry_days,
-      },
-      cash_value: cashValue,
-      total_amount_paid: totalAmountPaid,
-    });
-  } catch (error: any) {
-    console.error('Error in lookup API:', error);
-    return NextResponse.json(
-      { success: false, message: error?.message || 'Lỗi xử lý tra cứu điểm' },
-      { status: 500 }
-    );
+    return NextResponse.json(result);
+  } catch (err) {
+    return errorResponse(err, 'Lỗi xử lý tra cứu điểm', 500);
   }
 }

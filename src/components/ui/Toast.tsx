@@ -19,9 +19,19 @@ interface ToastContextType {
   info: (title: string, message?: string) => void;
 }
 
+const TOAST_STYLES: Record<ToastType, string> = {
+  success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
+  error: 'bg-rose-50 border-rose-200 text-rose-900',
+  info: 'bg-blue-50 border-blue-200 text-blue-900',
+};
+
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+interface ToastProviderProps {
+  children: React.ReactNode;
+}
+
+export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const removeToast = useCallback((id: string) => {
@@ -49,13 +59,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-lg border transition-all animate-fade-in ${
-              toast.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : toast.type === 'error'
-                ? 'bg-rose-50 border-rose-200 text-rose-900'
-                : 'bg-blue-50 border-blue-200 text-blue-900'
-            }`}
+            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-lg border transition-all animate-fade-in ${TOAST_STYLES[toast.type]}`}
           >
             <div className="shrink-0 mt-0.5">
               {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}

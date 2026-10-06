@@ -12,16 +12,16 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { loyaltyStore, DEFAULT_SETTING } from '@/lib/store/loyalty-store';
-import { authStore } from '@/lib/auth/auth-store';
-import { PointSetting, UserRole, BonusTier } from '@/types/database';
-import { formatVND } from '@/lib/points-engine';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { useCurrentUser } from '@/lib/auth/auth-store';
+import { DEFAULT_SETTING, formatVND } from '@/lib/points-engine';
 import { useToast } from '@/components/ui/Toast';
+import { PointSetting, UserRole, BonusTier } from '@/types/database';
 
 export default function SettingsPage() {
-  const { success, error, info } = useToast();
+  const { success, error } = useToast();
   const [setting, setSetting] = useState<PointSetting>(DEFAULT_SETTING);
-  const [role, setRole] = useState<UserRole>('ADMIN');
+  const role: UserRole = useCurrentUser()?.role ?? 'STAFF';
   const [loading, setLoading] = useState(false);
   // Bonus tier form state
   const [newTierAmount, setNewTierAmount] = useState<string>('');
@@ -29,18 +29,11 @@ export default function SettingsPage() {
   const [newTierLabel, setNewTierLabel] = useState<string>('');
 
   useEffect(() => {
-    loyaltyStore.getPointSettings().then(setSetting);
-
-    // Lấy role từ authStore (đồng bộ với session đăng nhập thực tế)
-    const currentUser = authStore.getCurrentUser();
-    if (currentUser) setRole(currentUser.role);
-
-    // Reactive: cập nhật role khi user đăng nhập/đăng xuất
-    const unsub = authStore.subscribe((user) => {
-      setRole(user ? user.role : 'STAFF');
-    });
-    return () => unsub();
-  }, []);
+    loyaltyApi
+      .getSettings()
+      .then(setSetting)
+      .catch((err) => error('Không tải được cấu hình', err instanceof Error ? err.message : ''));
+  }, [error]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,21 +44,21 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      await loyaltyStore.updatePointSettings({
+      const saved = await loyaltyApi.updateSettings({
         amount_per_point: setting.amount_per_point,
         points_per_amount: setting.points_per_amount,
         cash_per_point: setting.cash_per_point || 1000,
-        rounding_mode: 'FLOOR',
         expiry_days: setting.expiry_days,
         bonus_tiers: setting.bonus_tiers,
       });
+      setSetting(saved);
 
       success(
         'Lưu cấu hình thành công!',
         `Tỷ lệ: ${formatVND(setting.amount_per_point)} = ${setting.points_per_amount} điểm | 1 điểm = ${formatVND(setting.cash_per_point || 1000)} tiền mặt | Hạn dùng: ${setting.expiry_days} ngày.`
       );
-    } catch (err: any) {
-      error('Lỗi lưu cấu hình', err.message);
+    } catch (err) {
+      error('Lỗi lưu cấu hình', err instanceof Error ? err.message : 'Không thể lưu cấu hình');
     } finally {
       setLoading(false);
     }

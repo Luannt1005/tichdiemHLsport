@@ -6,17 +6,12 @@ import Link from 'next/link';
 import {
   Menu,
   ShieldCheck,
-  User,
   LogOut,
   ScrollText,
   ChevronDown,
   UserCircle,
-  Sparkles,
 } from 'lucide-react';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
-import { authStore } from '@/lib/auth/auth-store';
-import { activityLogService } from '@/lib/services/activity-log-service';
-import { AppUser, UserRole } from '@/types/database';
+import { authStore, useCurrentUser } from '@/lib/auth/auth-store';
 import { useToast } from '@/components/ui/Toast';
 import { AccountProfileModal } from '@/components/auth/AccountProfileModal';
 
@@ -29,26 +24,21 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/settings': { title: 'Cài đặt Tích Điểm', subtitle: 'Cấu hình tỷ lệ quy đổi, làm tròn và số ngày hết hạn' },
 };
 
-export function Header({
-  onMenuClick,
-}: {
+interface HeaderProps {
   onMenuClick: () => void;
-}) {
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { info, success } = useToast();
+  const { info } = useToast();
 
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const currentUser = useCurrentUser();
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setCurrentUser(authStore.getCurrentUser());
-    const unsub = authStore.subscribe((user) => {
-      setCurrentUser(user);
-    });
-
     // Close dropdown when clicking outside
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -58,22 +48,11 @@ export function Header({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      unsub();
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
   const handleLogout = async () => {
-    if (currentUser) {
-      await activityLogService.logActivity(
-        'LOGOUT',
-        'AUTH',
-        currentUser.id,
-        `Tài khoản ${currentUser.name} (@${currentUser.username}) đã đăng xuất khỏi hệ thống`,
-        { username: currentUser.username, role: currentUser.role }
-      );
-    }
-
     await authStore.logout();
     setShowUserDropdown(false);
     setShowProfileModal(false);
@@ -86,7 +65,7 @@ export function Header({
     subtitle: 'Quản lý điểm thành viên sân cầu lông HL Sport',
   };
 
-  const role = currentUser?.role || 'ADMIN';
+  const role = currentUser?.role || 'STAFF';
   const initialLetter = (currentUser?.name || 'A').charAt(0).toUpperCase();
 
   return (

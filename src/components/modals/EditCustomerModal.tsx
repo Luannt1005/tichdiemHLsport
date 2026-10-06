@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { User, Phone, Mail, FileText, X, Check, Edit3, Trash2 } from 'lucide-react';
-import { Customer } from '@/types/database';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
+import { User, Phone, Mail, X, Check, Edit3, Trash2 } from 'lucide-react';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
+import { useMounted } from '@/lib/hooks/use-mounted';
 import { useToast } from '@/components/ui/Toast';
+import { Customer } from '@/types/database';
 
 interface EditCustomerModalProps {
   isOpen: boolean;
@@ -23,24 +24,23 @@ export function EditCustomerModal({
   onDelete,
 }: EditCustomerModalProps) {
   const { success, error } = useToast();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
 
   const [name, setName] = useState(customer.name);
   const [email, setEmail] = useState(customer.email || '');
   const [phone, setPhone] = useState(customer.phone);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  // Nạp lại form mỗi lần mở modal (điều chỉnh state trong lúc render thay vì effect)
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
     if (isOpen) {
       setName(customer.name);
       setEmail(customer.email || '');
       setPhone(customer.phone);
     }
-  }, [isOpen, customer]);
+  }
 
   if (!isOpen || !mounted) return null;
 
@@ -54,18 +54,17 @@ export function EditCustomerModal({
     setLoading(true);
     try {
       // Update customer
-      const updated = await loyaltyStore.updateCustomer(
-        customer.id,
-        name.trim(),
-        email.trim() || undefined,
-        phone.trim() || undefined
-      );
+      const updated = await loyaltyApi.updateCustomer(customer.id, {
+        name: name.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || undefined,
+      });
 
       success('Cập nhật thành công', `Đã lưu thông tin mới của ${name}`);
       if (onSuccess) onSuccess(updated);
       onClose();
-    } catch (err: any) {
-      error('Lỗi cập nhật', err.message || 'Không thể lưu thông tin khách hàng');
+    } catch (err) {
+      error('Lỗi cập nhật', err instanceof Error ? err.message : 'Không thể lưu thông tin khách hàng');
     } finally {
       setLoading(false);
     }

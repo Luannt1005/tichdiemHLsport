@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -14,8 +14,7 @@ import {
   ChevronRight,
   X,
 } from 'lucide-react';
-import { authStore } from '@/lib/auth/auth-store';
-import { AppUser } from '@/types/database';
+import { useCurrentUser } from '@/lib/auth/auth-store';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 interface NavItem {
@@ -62,24 +61,15 @@ const navItems: NavItem[] = [
   },
 ];
 
-
-
-export function Sidebar({
-  mobileOpen,
-  setMobileOpen,
-}: {
+interface SidebarProps {
   mobileOpen: boolean;
   setMobileOpen: (open: boolean) => void;
-}) {
+}
+
+export function Sidebar({ mobileOpen, setMobileOpen }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-
-  useEffect(() => {
-    setCurrentUser(authStore.getCurrentUser());
-    const unsub = authStore.subscribe((u) => setCurrentUser(u));
-    return () => unsub();
-  }, []);
+  const currentUser = useCurrentUser();
 
   const visibleNavItems = navItems.filter(
     (item) => !item.adminOnly || currentUser?.role === 'ADMIN'

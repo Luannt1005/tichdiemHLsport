@@ -1,4 +1,4 @@
-import React from 'react';
+import Image from 'next/image';
 
 interface BrandLogoProps {
   className?: string;
@@ -9,9 +9,11 @@ interface BrandLogoProps {
 export function BrandLogo({ className = 'w-6 h-6', variant = 'white', alt = 'Victor Badminton Logo' }: BrandLogoProps) {
   const src = variant === 'white' ? '/victorlogo-white.png' : '/victorlogo.png';
   return (
-    <img
+    <Image
       src={src}
       alt={alt}
+      width={128}
+      height={128}
       className={`object-contain select-none ${className}`}
       draggable={false}
     />

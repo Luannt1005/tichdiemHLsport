@@ -1,4 +1,4 @@
-import { RoundingMode, BonusTier } from '@/types/database';
+import { RoundingMode, BonusTier, PointSetting } from '@/types/database';
 
 /**
  * Calculates loyalty points earned from payment amount based on setting rules
@@ -132,4 +132,34 @@ export function formatDateOnly(dateStr: string | null | undefined): string {
     month: '2-digit',
     day: '2-digit',
   }).format(d);
+}
+
+/**
+ * Cấu hình mặc định khi chưa có bản ghi point_settings (dùng chung client + server)
+ */
+export const DEFAULT_SETTING: PointSetting = {
+  id: 'default-setting-01',
+  amount_per_point: 10000,
+  points_per_amount: 1,
+  cash_per_point: 1000,
+  rounding_mode: 'FLOOR',
+  expiry_days: 90,
+  is_active: true,
+  updated_by: 'HỆ THỐNG',
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+  bonus_tiers: [
+    { id: 'bt-01', minAmount: 1000000, bonusPoints: 50, label: 'Mốc 1 triệu' },
+    { id: 'bt-02', minAmount: 2000000, bonusPoints: 150, label: 'Mốc 2 triệu' },
+    { id: 'bt-03', minAmount: 5000000, bonusPoints: 500, label: 'Mốc 5 triệu' },
+  ],
+};
+
+export function formatTimeOnly(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(dateStr));
 }

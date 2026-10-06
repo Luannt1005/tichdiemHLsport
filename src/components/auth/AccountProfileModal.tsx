@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   User,
@@ -15,10 +16,11 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { AppUser } from '@/types/database';
 import { authStore } from '@/lib/auth/auth-store';
-import { activityLogService } from '@/lib/services/activity-log-service';
+import { useMounted } from '@/lib/hooks/use-mounted';
+import { formatDateTime } from '@/lib/points-engine';
 import { useToast } from '@/components/ui/Toast';
+import { AppUser } from '@/types/database';
 
 interface AccountProfileModalProps {
   user: AppUser | null;
@@ -33,7 +35,8 @@ export function AccountProfileModal({
   onClose,
   onLogout,
 }: AccountProfileModalProps) {
-  const { success, error: toastError } = useToast();
+  const { success } = useToast();
+  const mounted = useMounted();
   const [activeTab, setActiveTab] = useState<'INFO' | 'PASSWORD'>('INFO');
 
   // Change password states
@@ -44,7 +47,7 @@ export function AccountProfileModal({
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
 
-  if (!isOpen || !user) return null;
+  if (!isOpen || !user || !mounted) return null;
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,14 +72,6 @@ export function AccountProfileModal({
     try {
       const res = await authStore.changePassword(oldPassword, newPassword);
       if (res.success) {
-        await activityLogService.logActivity(
-          'SETTINGS_UPDATE',
-          'AUTH',
-          user.id,
-          `Người dùng ${user.name} (${user.username}) đã thay đổi mật khẩu tài khoản`,
-          { username: user.username }
-        );
-
         success('Đổi mật khẩu thành công', 'Mật khẩu của bạn đã được cập nhật an toàn');
         setOldPassword('');
         setNewPassword('');
@@ -85,29 +80,16 @@ export function AccountProfileModal({
       } else {
         setPwError(res.error || 'Đổi mật khẩu thất bại');
       }
-    } catch (err: any) {
-      setPwError(err?.message || 'Có lỗi xảy ra khi đổi mật khẩu');
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi đổi mật khẩu');
     } finally {
       setPwLoading(false);
     }
   };
 
-  const formatDate = (isoStr?: string | null) => {
-    if (!isoStr) return 'Chưa ghi nhận';
-    try {
-      return new Date(isoStr).toLocaleString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      });
-    } catch (_) {
-      return isoStr;
-    }
-  };
+  const formatDate = (isoStr?: string | null) => (isoStr ? formatDateTime(isoStr) : 'Chưa ghi nhận');
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
@@ -337,6 +319,7 @@ export function AccountProfileModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

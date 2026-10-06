@@ -5,40 +5,23 @@ import Link from 'next/link';
 import {
   Search,
   Phone,
-  Calendar,
   Clock,
   TrendingUp,
-  Gift,
   CheckCircle2,
   HelpCircle,
   AlertCircle,
-  Sparkles,
   Coins,
-  Wallet,
 } from 'lucide-react';
-import { Customer, PointLot, PointTransaction } from '@/types/database';
+import { formatDateOnly, formatDateTime, formatVND } from '@/lib/points-engine';
+import { TRANSACTION_TYPE_STYLES, formatPointsDelta, pointsTextClass } from '@/lib/transaction-display';
 import { BrandLogo } from '@/components/ui/BrandLogo';
-
-interface LookupData {
-  customer: Customer;
-  lots: PointLot[];
-  transactions: PointTransaction[];
-  settings: {
-    amount_per_point: number;
-    points_per_amount: number;
-    cash_per_point?: number;
-    expiry_days: number;
-  };
-  cash_per_point?: number;
-  cash_value: number;
-  total_amount_paid?: number;
-}
+import { PublicLookupResult } from '@/types/database';
 
 export default function CustomerLookupPage() {
   const [phoneInput, setPhoneInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [data, setData] = useState<LookupData | null>(null);
+  const [data, setData] = useState<PublicLookupResult | null>(null);
   const [activeTab, setActiveTab] = useState<'HISTORY' | 'LOTS' | 'POLICY'>('HISTORY');
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,7 +57,7 @@ export default function CustomerLookupPage() {
             'Không tìm thấy số điện thoại này trên hệ thống. Vui lòng liên hệ thu ngân tại sân để kiểm tra!'
         );
       }
-    } catch (err: any) {
+    } catch {
       setData(null);
       setErrorMsg('Không thể kết nối máy chủ. Vui lòng thử lại sau.');
     } finally {
@@ -88,30 +71,6 @@ export default function CustomerLookupPage() {
     }
   };
 
-  const formatDate = (isoStr?: string | null) => {
-    if (!isoStr) return '—';
-    try {
-      return new Date(isoStr).toLocaleDateString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      });
-    } catch (_) {
-      return isoStr;
-    }
-  };
-
-  const formatDateTime = (isoStr: string) => {
-    try {
-      const d = new Date(isoStr);
-      return {
-        date: d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        time: d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-      };
-    } catch (_) {
-      return { date: isoStr, time: '' };
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
@@ -233,7 +192,7 @@ export default function CustomerLookupPage() {
                     <span>
                       Quy đổi tiền mặt:{' '}
                       <strong className="text-white text-sm">
-                        {data.cash_value.toLocaleString('vi-VN')} đ
+                        {formatVND(data.cash_value)}
                       </strong>
                     </span>
                   </div>
@@ -244,7 +203,7 @@ export default function CustomerLookupPage() {
                   <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
                     <span className="text-[11px] text-emerald-200 font-medium">Số tiền đã thanh toán:</span>
                     <strong className="text-white text-sm sm:text-base font-bold">
-                      {(data.total_amount_paid || 0).toLocaleString('vi-VN')} đ
+                      {formatVND(data.total_amount_paid)}
                     </strong>
                   </div>
                   <div className="bg-black/20 p-2.5 rounded-xl flex items-center justify-between sm:flex-col sm:items-start gap-1">
@@ -323,9 +282,6 @@ export default function CustomerLookupPage() {
                       </p>
                     ) : (
                       data.transactions.map((tx) => {
-                        const isPositive = tx.points > 0;
-                        const dateObj = formatDateTime(tx.created_at);
-
                         return (
                           <div
                             key={tx.id}
@@ -339,14 +295,12 @@ export default function CustomerLookupPage() {
                                     : 'Dùng điểm giảm giá')}
                               </p>
                               <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-1.5">
-                                <span>{dateObj.time}</span>
-                                <span>•</span>
-                                <span>{dateObj.date}</span>
-                                {tx.amount && tx.amount > 0 && (
+                                <span>{formatDateTime(tx.created_at)}</span>
+                                {tx.amount > 0 && (
                                   <>
                                     <span>•</span>
                                     <span className="font-semibold text-slate-600">
-                                      Thanh toán: {tx.amount.toLocaleString('vi-VN')} đ
+                                      Thanh toán: {formatVND(tx.amount)}
                                     </span>
                                   </>
                                 )}
@@ -355,16 +309,12 @@ export default function CustomerLookupPage() {
 
                             <div className="text-right shrink-0">
                               <span
-                                className={`font-extrabold text-sm sm:text-base ${
-                                  isPositive ? 'text-emerald-600' : 'text-rose-600'
-                                }`}
+                                className={`font-extrabold text-sm sm:text-base ${pointsTextClass(tx)}`}
                               >
-                                {isPositive
-                                  ? `+${tx.points.toLocaleString('vi-VN')}`
-                                  : tx.points.toLocaleString('vi-VN')}
+                                {formatPointsDelta(tx.points)}
                               </span>
                               <span className="text-[10px] text-slate-400 block">
-                                {tx.type === 'EARN' ? 'Cộng điểm' : 'Trừ điểm'}
+                                {TRANSACTION_TYPE_STYLES[tx.type].label}
                               </span>
                             </div>
                           </div>
@@ -401,7 +351,7 @@ export default function CustomerLookupPage() {
                                 </span>
                               </div>
                               <p className="text-xs text-slate-500 mt-0.5">
-                                Tích ngày: {formatDate(lot.earned_at)}
+                                Tích ngày: {formatDateOnly(lot.earned_at)}
                               </p>
                             </div>
 
@@ -409,7 +359,7 @@ export default function CustomerLookupPage() {
                               <div className="text-right">
                                 <span className="text-[11px] text-slate-400 block">Hạn đến</span>
                                 <span className="text-xs font-semibold text-slate-700">
-                                  {formatDate(lot.expires_at)}
+                                  {formatDateOnly(lot.expires_at)}
                                 </span>
                               </div>
 
@@ -441,7 +391,7 @@ export default function CustomerLookupPage() {
                         <li>
                           <strong>Tích điểm:</strong> Mỗi{' '}
                           <span className="font-bold text-slate-900">
-                            {data.settings.amount_per_point.toLocaleString('vi-VN')} đ
+                            {formatVND(data.settings.amount_per_point)}
                           </span>{' '}
                           tiền sân được cộng{' '}
                           <span className="font-bold text-emerald-700">
@@ -452,7 +402,7 @@ export default function CustomerLookupPage() {
                           <strong>Quy đổi tiền mặt:</strong> Mỗi{' '}
                           <span className="font-bold text-amber-700">1 điểm thưởng</span> có giá trị tương đương{' '}
                           <span className="font-bold text-slate-900">
-                            {(data.cash_per_point || data.settings.cash_per_point || 1000).toLocaleString('vi-VN')} đ
+                            {formatVND(data.settings.cash_per_point)}
                           </span>{' '}
                           tiền mặt khi dùng để trừ vào tiền sân khi thanh toán.
                         </li>

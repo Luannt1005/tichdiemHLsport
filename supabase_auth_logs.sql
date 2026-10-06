@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE,
     name VARCHAR(100) NOT NULL,
-    password_hash VARCHAR(255) NOT NULL, -- Mật khẩu băm hoặc chuỗi kiểm tra
+    password_hash VARCHAR(255) NOT NULL, -- Hash bcrypt ($2a$/$2b$), không bao giờ lưu plaintext
     role VARCHAR(20) NOT NULL DEFAULT 'STAFF' CHECK (role IN ('ADMIN', 'STAFF')),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     last_login_at TIMESTAMPTZ,
@@ -40,27 +40,40 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_username ON public.activity_logs(us
 CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON public.activity_logs(action);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_entity ON public.activity_logs(entity_type, entity_id);
 
--- 3. KÍCH HOẠT ROW LEVEL SECURITY (RLS) & CHÍNH SÁCH TRUY CẬP CÔNG KHAI CHO HỆ THỐNG NỘI BỘ
+-- 3. ROW LEVEL SECURITY — KHÔNG CÓ POLICY CHO anon / authenticated
+-- Ứng dụng chỉ truy cập 2 bảng này qua API route phía server bằng service_role (bỏ qua RLS).
+-- Bật RLS mà không tạo policy = từ chối mọi request dùng anon key (công khai trong trình duyệt).
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
--- Cho phép ứng dụng đọc và ghi danh mục người dùng và logs
+-- Gỡ các policy mở toang của phiên bản cũ (nếu còn)
 DROP POLICY IF EXISTS "Public full access to app_users" ON public.app_users;
-CREATE POLICY "Public full access to app_users" ON public.app_users FOR ALL USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Public full access to activity_logs" ON public.activity_logs;
-CREATE POLICY "Public full access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
 
--- 4. THÊM TÀI KHOẢN ADMIN VÀ THU NGÂN ĐỊNH SẴN NẾU CHƯA CÓ
+REVOKE ALL ON public.app_users FROM anon, authenticated;
+REVOKE ALL ON public.activity_logs FROM anon, authenticated;
+GRANT ALL ON public.app_users TO service_role;
+GRANT ALL ON public.activity_logs TO service_role;
+
+-- 4. MẬT KHẨU: CHỈ LƯU HASH BCRYPT
+-- pgcrypto trên Supabase nằm trong schema "extensions"
+SET search_path = public, extensions;
+
+-- Hash mọi mật khẩu còn ở dạng plaintext (ứng dụng so khớp bằng bcryptjs, tương thích $2a$)
+UPDATE public.app_users
+SET password_hash = crypt(password_hash, gen_salt('bf', 10)),
+    updated_at = NOW()
+WHERE password_hash NOT LIKE '$2%';
+
+-- Tài khoản khởi tạo khi bảng còn trống. KHÔNG ghi đè tài khoản đã tồn tại.
+-- ⚠️ Thay 'MAT_KHAU_MANH_O_DAY' bằng mật khẩu an toàn trước khi chạy
 INSERT INTO public.app_users (username, email, name, password_hash, role, is_active)
-VALUES 
-    ('admin', 'admin@hlsport.vn', 'Quản trị viên HL Sport', 'admin123', 'ADMIN', true),
-    ('nhanvien', 'nhanvien@hlsport.vn', 'Thu ngân HL Sport', 'staff123', 'STAFF', true)
-ON CONFLICT (username) DO UPDATE 
-SET name = EXCLUDED.name,
-    password_hash = EXCLUDED.password_hash,
-    role = EXCLUDED.role,
-    is_active = EXCLUDED.is_active;
+VALUES
+    ('admin', 'admin@hlsport.vn', 'Quản trị viên HL Sport', crypt('MAT_KHAU_MANH_O_DAY_1', gen_salt('bf', 10)), 'ADMIN', true),
+    ('nhanvien', 'nhanvien@hlsport.vn', 'Thu ngân HL Sport', crypt('MAT_KHAU_MANH_O_DAY_2', gen_salt('bf', 10)), 'STAFF', true)
+ON CONFLICT (username) DO NOTHING;
+
+RESET search_path;
 
 -- 5. GHI NHẬN LOG KHỞI TẠO HỆ THỐNG
 INSERT INTO public.activity_logs (user_id, username, user_role, action, entity_type, entity_id, description, metadata)

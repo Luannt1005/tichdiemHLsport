@@ -1,87 +1,61 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse, optionalString, readJsonBody } from '@/lib/server/api-response';
 import { loyaltyStore } from '@/lib/store/loyalty-store';
+import { CustomerDetail } from '@/types/database';
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function GET(request: NextRequest, { params }: RouteContext) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+
   try {
     const { id } = await params;
     const customer = await loyaltyStore.getCustomerById(id);
-
     if (!customer) {
-      return NextResponse.json(
-        { error: `Không tìm thấy khách hàng với ID ${id}` },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Không tìm thấy khách hàng' }, { status: 404 });
     }
 
-    const lots = await loyaltyStore.getCustomerLots(id);
-    const transactions = await loyaltyStore.getTransactions({ customerId: id });
-
-    return NextResponse.json({
-      ...customer,
-      lots,
-      transactions,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi tra cứu khách hàng' },
-      { status: 500 }
-    );
+    const [lots, transactions] = await Promise.all([
+      loyaltyStore.getCustomerLots(id),
+      loyaltyStore.getTransactions({ customerId: id }),
+    ]);
+    const detail: CustomerDetail = { ...customer, lots, transactions };
+    return NextResponse.json(detail);
+  } catch (err) {
+    return errorResponse(err, 'Lỗi tra cứu khách hàng', 500);
   }
 }
 
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: RouteContext) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+
   try {
     const { id } = await params;
-    const body = await request.json();
-    const { name, email } = body;
-
-    const customer = await loyaltyStore.getCustomerById(id);
-    if (!customer) {
-      return NextResponse.json(
-        { error: `Không tìm thấy khách hàng với ID ${id}` },
-        { status: 404 }
-      );
-    }
-
-    const updated = await loyaltyStore.updateCustomer(id, name || customer.name, email);
+    const body = await readJsonBody(request);
+    const updated = await loyaltyStore.updateCustomer(auth.user, id, {
+      name: optionalString(body.name),
+      email: body.email === null ? null : optionalString(body.email),
+      phone: optionalString(body.phone),
+    });
     return NextResponse.json(updated);
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi cập nhật khách hàng' },
-      { status: 400 }
-    );
+  } catch (err) {
+    return errorResponse(err, 'Lỗi cập nhật khách hàng');
   }
 }
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+/** Xóa khách hàng kéo theo toàn bộ lịch sử điểm → chỉ ADMIN */
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  const auth = await requireUser(request, ['ADMIN']);
+  if (auth.response) return auth.response;
+
   try {
     const { id } = await params;
-    const customer = await loyaltyStore.getCustomerById(id);
-    if (!customer) {
-      return NextResponse.json(
-        { error: `Không tìm thấy khách hàng với ID ${id}` },
-        { status: 404 }
-      );
-    }
-
-    await loyaltyStore.deleteCustomer(id);
-    return NextResponse.json({
-      success: true,
-      message: `Đã xóa khách hàng ${customer.name} thành công`,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Lỗi khi xóa khách hàng' },
-      { status: 400 }
-    );
+    const customer = await loyaltyStore.deleteCustomer(auth.user, id);
+    return NextResponse.json({ success: true, message: `Đã xóa khách hàng ${customer.name} thành công` });
+  } catch (err) {
+    return errorResponse(err, 'Lỗi khi xóa khách hàng');
   }
 }

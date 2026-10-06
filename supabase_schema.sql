@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.point_settings (
     amount_per_point NUMERIC(15, 2) NOT NULL DEFAULT 10000.00 CHECK (amount_per_point > 0),
     points_per_amount INTEGER NOT NULL DEFAULT 1 CHECK (points_per_amount > 0),
     cash_per_point NUMERIC(15, 2) NOT NULL DEFAULT 1000.00 CHECK (cash_per_point > 0),
+    bonus_tiers JSONB, -- Mốc thưởng theo hóa đơn: [{id, minAmount, bonusPoints, label}]; NULL = dùng mặc định của ứng dụng
     rounding_mode VARCHAR(20) NOT NULL DEFAULT 'FLOOR' CHECK (rounding_mode IN ('FLOOR', 'ROUND', 'CEIL')),
     expiry_days INTEGER NOT NULL DEFAULT 90 CHECK (expiry_days > 0),
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS public.point_settings (
 
 -- Migration nếu bảng đã tồn tại trước đó
 ALTER TABLE public.point_settings ADD COLUMN IF NOT EXISTS cash_per_point NUMERIC(15, 2) NOT NULL DEFAULT 1000.00;
+ALTER TABLE public.point_settings ADD COLUMN IF NOT EXISTS bonus_tiers JSONB;
 
 -- Tạo bản ghi cấu hình mặc định nếu chưa có
 INSERT INTO public.point_settings (amount_per_point, points_per_amount, cash_per_point, rounding_mode, expiry_days, is_active, updated_by)
@@ -113,6 +115,7 @@ CREATE OR REPLACE FUNCTION public.earn_points_atomic(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = '' -- chặn tấn công thay đổi search_path; mọi tên bảng đều ghi đủ public.
 AS $$
 DECLARE
     v_customer_id UUID;
@@ -226,6 +229,7 @@ CREATE OR REPLACE FUNCTION public.redeem_points_fefo_atomic(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = '' -- chặn tấn công thay đổi search_path; mọi tên bảng đều ghi đủ public.
 AS $$
 DECLARE
     v_customer RECORD;
@@ -348,12 +352,14 @@ CREATE OR REPLACE FUNCTION public.adjust_points_atomic(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = '' -- chặn tấn công thay đổi search_path; mọi tên bảng đều ghi đủ public.
 AS $$
 DECLARE
     v_customer RECORD;
     v_transaction_id UUID;
     v_lot_id UUID;
     v_expires_at TIMESTAMPTZ;
+    v_expiry_days INTEGER;
     v_new_balance INTEGER;
 BEGIN
     IF p_points_delta = 0 THEN
@@ -385,7 +391,13 @@ BEGIN
     RETURNING id INTO v_transaction_id;
 
     IF p_points_delta > 0 THEN
-        v_expires_at := now() + INTERVAL '90 days';
+        -- Hạn dùng theo cấu hình hiện hành (giống earn_points_atomic), mặc định 90 ngày
+        SELECT expiry_days INTO v_expiry_days
+        FROM public.point_settings
+        WHERE is_active = true
+        ORDER BY created_at DESC
+        LIMIT 1;
+        v_expires_at := now() + (COALESCE(v_expiry_days, 90) || ' days')::INTERVAL;
         INSERT INTO public.point_lots (
             customer_id, transaction_id, original_points, remaining_points, earned_at, expires_at, status
         )
@@ -426,6 +438,7 @@ CREATE OR REPLACE FUNCTION public.expire_points_atomic()
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = '' -- chặn tấn công thay đổi search_path; mọi tên bảng đều ghi đủ public.
 AS $$
 DECLARE
     v_expired_lot RECORD;
@@ -472,24 +485,51 @@ BEGIN
 END;
 $$;
 
--- 8. ROW LEVEL SECURITY (RLS)
+-- ==============================================================================
+-- 8. BẢO MẬT: ROW LEVEL SECURITY + PHÂN QUYỀN
+-- ==============================================================================
+-- Ứng dụng KHÔNG gọi Supabase từ trình duyệt. Mọi truy cập đi qua API route phía server
+-- bằng service_role (bỏ qua RLS). Vì anon key là công khai, anon / authenticated phải bị
+-- từ chối hoàn toàn: bật RLS, KHÔNG tạo policy nào cho họ, và thu hồi quyền trên bảng + function.
+-- File này chạy lại được nhiều lần (idempotent).
+
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_lots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_redemption_allocations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read customers" ON public.customers FOR SELECT USING (true);
-CREATE POLICY "Allow write customers" ON public.customers FOR ALL USING (true);
+-- Gỡ các policy USING (true) của phiên bản cũ
+DROP POLICY IF EXISTS "Allow read customers" ON public.customers;
+DROP POLICY IF EXISTS "Allow write customers" ON public.customers;
+DROP POLICY IF EXISTS "Allow read point_settings" ON public.point_settings;
+DROP POLICY IF EXISTS "Allow update point_settings" ON public.point_settings;
+DROP POLICY IF EXISTS "Allow read point_transactions" ON public.point_transactions;
+DROP POLICY IF EXISTS "Allow write point_transactions" ON public.point_transactions;
+DROP POLICY IF EXISTS "Allow read point_lots" ON public.point_lots;
+DROP POLICY IF EXISTS "Allow write point_lots" ON public.point_lots;
+DROP POLICY IF EXISTS "Allow read point_redemption_allocations" ON public.point_redemption_allocations;
+DROP POLICY IF EXISTS "Allow write point_redemption_allocations" ON public.point_redemption_allocations;
 
-CREATE POLICY "Allow read point_settings" ON public.point_settings FOR SELECT USING (true);
-CREATE POLICY "Allow update point_settings" ON public.point_settings FOR ALL USING (true);
+REVOKE ALL ON public.customers, public.point_settings, public.point_transactions,
+    public.point_lots, public.point_redemption_allocations
+    FROM anon, authenticated;
+GRANT ALL ON public.customers, public.point_settings, public.point_transactions,
+    public.point_lots, public.point_redemption_allocations
+    TO service_role;
 
-CREATE POLICY "Allow read point_transactions" ON public.point_transactions FOR SELECT USING (true);
-CREATE POLICY "Allow write point_transactions" ON public.point_transactions FOR ALL USING (true);
+-- RPC thay đổi điểm: chỉ service_role (server) được gọi
+REVOKE EXECUTE ON FUNCTION public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.redeem_points_fefo_atomic(UUID, INTEGER, TEXT, VARCHAR, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.adjust_points_atomic(UUID, INTEGER, TEXT, VARCHAR) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.expire_points_atomic() FROM PUBLIC, anon, authenticated;
 
-CREATE POLICY "Allow read point_lots" ON public.point_lots FOR SELECT USING (true);
-CREATE POLICY "Allow write point_lots" ON public.point_lots FOR ALL USING (true);
+GRANT EXECUTE ON FUNCTION public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR) TO service_role;
+GRANT EXECUTE ON FUNCTION public.redeem_points_fefo_atomic(UUID, INTEGER, TEXT, VARCHAR, VARCHAR, VARCHAR) TO service_role;
+GRANT EXECUTE ON FUNCTION public.adjust_points_atomic(UUID, INTEGER, TEXT, VARCHAR) TO service_role;
+GRANT EXECUTE ON FUNCTION public.expire_points_atomic() TO service_role;
 
-CREATE POLICY "Allow read point_redemption_allocations" ON public.point_redemption_allocations FOR SELECT USING (true);
-CREATE POLICY "Allow write point_redemption_allocations" ON public.point_redemption_allocations FOR ALL USING (true);
+-- Bảng / function tạo mới sau này trong schema public cũng KHÔNG tự cấp quyền cho anon / authenticated
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;

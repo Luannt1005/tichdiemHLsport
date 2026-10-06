@@ -3,21 +3,31 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ClockAlert, Calendar, ArrowRight, User } from 'lucide-react';
-import { loyaltyStore } from '@/lib/store/loyalty-store';
-import { PointLot, Customer } from '@/types/database';
+import { loyaltyApi } from '@/lib/api/loyalty-api';
 import { formatDateOnly } from '@/lib/points-engine';
+import { ExpiringLot } from '@/types/database';
 
 export function ExpiringSoonSection() {
   const [days, setDays] = useState<number>(30);
-  const [lots, setLots] = useState<(PointLot & { customer?: Customer })[]>([]);
+  const [lots, setLots] = useState<ExpiringLot[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    loyaltyStore.getExpiringLots(days).then((data) => {
-      setLots(data);
-      setLoading(false);
-    });
+    let cancelled = false;
+    loyaltyApi
+      .getExpiring(days)
+      .then((data) => {
+        if (!cancelled) setLots(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [days]);
 
   return (
@@ -41,7 +51,10 @@ export function ExpiringSoonSection() {
           {[7, 30, 60].map((d) => (
             <button
               key={d}
-              onClick={() => setDays(d)}
+              onClick={() => {
+                setDays(d);
+                setLoading(true);
+              }}
               className={`px-3 py-1.5 rounded-lg transition-all ${
                 days === d ? 'bg-white text-rose-600 shadow-xs font-bold' : 'hover:text-slate-900'
               }`}
@@ -53,15 +66,17 @@ export function ExpiringSoonSection() {
       </div>
 
       {/* Table / List */}
-      {loading ? (
+      {loading && (
         <div className="py-8 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
-      ) : lots.length === 0 ? (
+      )}
+      {!loading && lots.length === 0 && (
         <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
           <p className="text-xs font-medium text-slate-500">
             Không có điểm nào sắp hết hạn trong {days} ngày tới.
           </p>
         </div>
-      ) : (
+      )}
+      {!loading && lots.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>

@@ -69,11 +69,11 @@ export function KpiCards({ stats }: KpiCardsProps) {
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-      {cards.map((card, idx) => {
+      {cards.map((card) => {
         const Icon = card.icon;
         return (
           <div
-            key={idx}
+            key={card.title}
             className={`p-4 rounded-2xl bg-white border ${card.borderColor} shadow-xs hover:shadow-md transition-all flex flex-col justify-between ${
               card.highlight ? 'ring-2 ring-amber-400/30' : ''
             }`}
