@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { after } from 'next/server';
 import { getDatabase } from '@/lib/supabase/server';
 import {
   ActivityAction,
@@ -58,6 +59,14 @@ class ActivityLogService {
     } catch (err) {
       console.error('Không ghi được activity_logs:', err);
     }
+  }
+
+  /**
+   * Ghi log SAU khi response đã gửi (next/server `after`) — người dùng không phải chờ thêm 1 lần gọi DB.
+   * Chỉ gọi trong phạm vi request (API route). Log vẫn được ghi kể cả khi request lỗi.
+   */
+  public logActivityAfterResponse(...args: Parameters<ActivityLogService['logActivity']>): void {
+    after(() => this.logActivity(...args));
   }
 
   public async getActivityLogs(

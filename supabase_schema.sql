@@ -46,8 +46,15 @@ CREATE TABLE IF NOT EXISTS public.customers (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_customers_phone ON public.customers(phone);
+-- phone đã UNIQUE nên Postgres tự có index; index riêng chỉ làm chậm ghi
+DROP INDEX IF EXISTS public.idx_customers_phone;
 CREATE INDEX IF NOT EXISTS idx_customers_total_points ON public.customers(total_points);
+CREATE INDEX IF NOT EXISTS idx_customers_created_at ON public.customers(created_at DESC);
+
+-- Tìm khách theo tên / SĐT bằng ilike '%...%' (B-tree không dùng được cho mẫu có % ở đầu)
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+CREATE INDEX IF NOT EXISTS idx_customers_name_trgm ON public.customers USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_customers_phone_trgm ON public.customers USING gin (phone extensions.gin_trgm_ops);
 
 -- 4. BẢNG GIAO DỊCH ĐIỂM (POINT TRANSACTIONS)
 CREATE TABLE IF NOT EXISTS public.point_transactions (
@@ -64,6 +71,8 @@ CREATE TABLE IF NOT EXISTS public.point_transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_point_transactions_customer ON public.point_transactions(customer_id);
+-- Lịch sử giao dịch của 1 khách, mới nhất trước
+CREATE INDEX IF NOT EXISTS idx_point_transactions_customer_created ON public.point_transactions(customer_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_point_transactions_created_at ON public.point_transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_point_transactions_type ON public.point_transactions(type);
 
@@ -103,6 +112,9 @@ CREATE INDEX IF NOT EXISTS idx_allocations_lot ON public.point_redemption_alloca
 -- ==============================================================================
 
 -- 7.1. CỘNG ĐIỂM KHI THANH TOÁN TIỀN SÂN (EARN POINTS ATOMIC)
+-- Điểm thưởng mốc hóa đơn (p_bonus_points) được cộng trong CÙNG transaction: 1 lần gọi, không mất thưởng giữa chừng.
+-- Bỏ chữ ký cũ (7 tham số) để PostgREST không bị nhập nhằng giữa 2 overload.
+DROP FUNCTION IF EXISTS public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR);
 CREATE OR REPLACE FUNCTION public.earn_points_atomic(
     p_phone VARCHAR,
     p_name VARCHAR,
@@ -110,7 +122,9 @@ CREATE OR REPLACE FUNCTION public.earn_points_atomic(
     p_description TEXT DEFAULT NULL,
     p_reference_type VARCHAR DEFAULT 'BOOKING',
     p_reference_id VARCHAR DEFAULT NULL,
-    p_created_by VARCHAR DEFAULT 'STAFF'
+    p_created_by VARCHAR DEFAULT 'STAFF',
+    p_bonus_points INTEGER DEFAULT 0,
+    p_bonus_reason TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -126,9 +140,16 @@ DECLARE
     v_lot_id UUID;
     v_new_total INTEGER;
     v_raw_points NUMERIC;
+    v_bonus INTEGER := COALESCE(p_bonus_points, 0);
+    v_bonus_transaction_id UUID;
+    v_total_added INTEGER;
+    v_customer JSONB;
 BEGIN
     IF p_amount <= 0 THEN
         RAISE EXCEPTION 'Số tiền thanh toán phải lớn hơn 0';
+    END IF;
+    IF v_bonus < 0 THEN
+        RAISE EXCEPTION 'Điểm thưởng không được âm';
     END IF;
 
     -- Lấy cấu hình điểm hiện hành
@@ -159,6 +180,7 @@ BEGIN
     IF v_calculated_points <= 0 THEN
         v_calculated_points := 1;
     END IF;
+    v_total_added := v_calculated_points + v_bonus;
 
     -- Tính ngày hết hạn dựa trên cấu hình tại THỜI ĐIỂM CỘNG (không đổi khi setting đổi sau này)
     v_expires_at := now() + (v_setting.expiry_days || ' days')::INTERVAL;
@@ -171,12 +193,12 @@ BEGIN
 
     IF NOT FOUND THEN
         INSERT INTO public.customers (phone, name, total_points, lifetime_points_earned, lifetime_points_used, last_transaction_at)
-        VALUES (p_phone, COALESCE(NULLIF(p_name, ''), 'Khách hàng mới'), v_calculated_points, v_calculated_points, 0, now())
+        VALUES (p_phone, COALESCE(NULLIF(p_name, ''), 'Khách hàng mới'), v_total_added, v_total_added, 0, now())
         RETURNING id, total_points INTO v_customer_id, v_new_total;
     ELSE
         UPDATE public.customers
-        SET total_points = total_points + v_calculated_points,
-            lifetime_points_earned = lifetime_points_earned + v_calculated_points,
+        SET total_points = total_points + v_total_added,
+            lifetime_points_earned = lifetime_points_earned + v_total_added,
             name = COALESCE(NULLIF(p_name, ''), name),
             last_transaction_at = now(),
             updated_at = now()
@@ -203,15 +225,40 @@ BEGIN
     )
     RETURNING id INTO v_lot_id;
 
+    -- Điểm thưởng mốc hóa đơn: giao dịch ADJUST + lô riêng, cùng hạn dùng (giống adjust_points_atomic)
+    IF v_bonus > 0 THEN
+        INSERT INTO public.point_transactions (
+            customer_id, type, points, amount, reference_type, description, created_by, created_at
+        )
+        VALUES (
+            v_customer_id, 'ADJUST', v_bonus, 0.00, 'ADJUSTMENT',
+            COALESCE(p_bonus_reason, 'Điểm thưởng mốc hóa đơn'), p_created_by, now()
+        )
+        RETURNING id INTO v_bonus_transaction_id;
+
+        INSERT INTO public.point_lots (
+            customer_id, transaction_id, original_points, remaining_points, earned_at, expires_at, status
+        )
+        VALUES (
+            v_customer_id, v_bonus_transaction_id, v_bonus, v_bonus, now(), v_expires_at, 'ACTIVE'
+        );
+    END IF;
+
+    -- Trả luôn bản ghi khách để server khỏi phải query lại
+    SELECT to_jsonb(c) INTO v_customer FROM public.customers c WHERE c.id = v_customer_id;
+
     RETURN jsonb_build_object(
         'success', true,
         'customer_id', v_customer_id,
         'transaction_id', v_transaction_id,
         'point_lot_id', v_lot_id,
         'points_earned', v_calculated_points,
+        'bonus_points', v_bonus,
+        'bonus_transaction_id', v_bonus_transaction_id,
         'new_total_points', v_new_total,
         'expires_at', v_expires_at,
-        'expiry_days', v_setting.expiry_days
+        'expiry_days', v_setting.expiry_days,
+        'customer', v_customer
     );
 END;
 $$;
@@ -240,6 +287,7 @@ DECLARE
     v_deduct INTEGER;
     v_allocations JSONB := '[]'::JSONB;
     v_new_balance INTEGER;
+    v_customer_json JSONB;
 BEGIN
     IF p_points_to_redeem <= 0 THEN
         RAISE EXCEPTION 'Số điểm sử dụng phải lớn hơn 0';
@@ -330,13 +378,16 @@ BEGIN
     WHERE id = p_customer_id
     RETURNING total_points INTO v_new_balance;
 
+    SELECT to_jsonb(c) INTO v_customer_json FROM public.customers c WHERE c.id = p_customer_id;
+
     RETURN jsonb_build_object(
         'success', true,
         'transaction_id', v_transaction_id,
         'customer_id', p_customer_id,
         'points_redeemed', p_points_to_redeem,
         'new_total_points', v_new_balance,
-        'allocations', v_allocations
+        'allocations', v_allocations,
+        'customer', v_customer_json
     );
 END;
 $$;
@@ -361,6 +412,7 @@ DECLARE
     v_expires_at TIMESTAMPTZ;
     v_expiry_days INTEGER;
     v_new_balance INTEGER;
+    v_customer_json JSONB;
 BEGIN
     IF p_points_delta = 0 THEN
         RAISE EXCEPTION 'Số điểm điều chỉnh không được bằng 0';
@@ -423,11 +475,14 @@ BEGIN
         SELECT total_points INTO v_new_balance FROM public.customers WHERE id = p_customer_id;
     END IF;
 
+    SELECT to_jsonb(c) INTO v_customer_json FROM public.customers c WHERE c.id = p_customer_id;
+
     RETURN jsonb_build_object(
         'success', true,
         'transaction_id', v_transaction_id,
         'points_delta', p_points_delta,
-        'new_total_points', v_new_balance
+        'new_total_points', v_new_balance,
+        'customer', v_customer_json
     );
 END;
 $$;
@@ -519,12 +574,12 @@ GRANT ALL ON public.customers, public.point_settings, public.point_transactions,
     TO service_role;
 
 -- RPC thay đổi điểm: chỉ service_role (server) được gọi
-REVOKE EXECUTE ON FUNCTION public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR, INTEGER, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.redeem_points_fefo_atomic(UUID, INTEGER, TEXT, VARCHAR, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.adjust_points_atomic(UUID, INTEGER, TEXT, VARCHAR) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.expire_points_atomic() FROM PUBLIC, anon, authenticated;
 
-GRANT EXECUTE ON FUNCTION public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR) TO service_role;
+GRANT EXECUTE ON FUNCTION public.earn_points_atomic(VARCHAR, VARCHAR, NUMERIC, TEXT, VARCHAR, VARCHAR, VARCHAR, INTEGER, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.redeem_points_fefo_atomic(UUID, INTEGER, TEXT, VARCHAR, VARCHAR, VARCHAR) TO service_role;
 GRANT EXECUTE ON FUNCTION public.adjust_points_atomic(UUID, INTEGER, TEXT, VARCHAR) TO service_role;
 GRANT EXECUTE ON FUNCTION public.expire_points_atomic() TO service_role;

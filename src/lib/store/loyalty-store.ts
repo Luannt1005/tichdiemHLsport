@@ -44,8 +44,16 @@ const PAGE_SIZE = 1000; // giới hạn mặc định số dòng mỗi request c
 const MAX_TEXT_LENGTH = 500;
 const TRANSACTION_TYPES: TransactionType[] = ['EARN', 'REDEEM', 'EXPIRE', 'ADJUST', 'REFUND'];
 const VN_TIMEZONE = 'Asia/Ho_Chi_Minh';
+// Cấu hình điểm hiếm khi đổi → cache trong bộ nhớ server, bớt 1 lần gọi DB cho mỗi lần tích điểm
+const SETTINGS_CACHE_MS = 60_000;
+// Embed các lô sắp hết hạn vào query customers → tính expiring_soon_points trong cùng 1 lần gọi
+const CUSTOMER_WITH_EXPIRING_LOTS = '*, point_lots(remaining_points)';
 
 type TransactionRow = PointTransaction & { customers?: { name: string; phone: string } | null };
+type CustomerRowWithLots = Customer & {
+  point_lots?: Pick<PointLot, 'remaining_points'>[] | null;
+  expired_lots?: unknown;
+};
 type LotRow = PointLot & { customers?: Customer | null };
 type RpcAllocation = { lot_id: string; points_deducted: number; lot_expires_at: string };
 
@@ -94,6 +102,23 @@ function isActiveUnexpired(lot: PointLot, now: Date): boolean {
 function isExpiringWithin(lot: PointLot, days: number, now: Date): boolean {
   const limit = new Date(now.getTime() + days * 86400000);
   return isActiveUnexpired(lot, now) && new Date(lot.expires_at) <= limit;
+}
+
+/** Khoảng thời gian "sắp hết hạn": (now, now + EXPIRING_WINDOW_DAYS] */
+function expiringWindow(): { from: string; to: string } {
+  const now = new Date();
+  return {
+    from: now.toISOString(),
+    to: new Date(now.getTime() + EXPIRING_WINDOW_DAYS * 86400000).toISOString(),
+  };
+}
+
+function toCustomerWithExpiring(row: CustomerRowWithLots): Customer {
+  const { point_lots: lots, expired_lots: _expired, ...customer } = row;
+  return {
+    ...customer,
+    expiring_soon_points: (lots || []).reduce((sum, lot) => sum + Number(lot.remaining_points || 0), 0),
+  };
 }
 
 function validateSettingUpdate(update: PointSettingUpdate): PointSettingUpdate {
@@ -239,6 +264,7 @@ class LoyaltyStore {
   private transactions: PointTransaction[] = [];
   private allocations: PointRedemptionAllocation[] = [];
   private settings: PointSetting = { ...DEFAULT_SETTING };
+  private settingsLoadedAt = 0;
 
   private syncAllCustomerBalances() {
     const now = new Date();
@@ -256,47 +282,33 @@ class LoyaltyStore {
       .reduce((sum, lot) => sum + lot.remaining_points, 0);
   }
 
-  private async liveExpiringPoints(db: SupabaseClient, customerId?: string): Promise<Map<string, number>> {
-    const now = new Date();
-    const limit = new Date(now.getTime() + EXPIRING_WINDOW_DAYS * 86400000);
-    const rows = await fetchAll<Pick<PointLot, 'customer_id' | 'remaining_points'>>((from, to) => {
-      let q = db
-        .from('point_lots')
-        .select('customer_id, remaining_points')
-        .eq('status', 'ACTIVE')
-        .gt('remaining_points', 0)
-        .gt('expires_at', now.toISOString())
-        .lte('expires_at', limit.toISOString());
-      if (customerId) q = q.eq('customer_id', customerId);
-      return q.range(from, to);
-    });
-
-    const map = new Map<string, number>();
-    for (const row of rows) map.set(row.customer_id, (map.get(row.customer_id) || 0) + row.remaining_points);
-    return map;
-  }
-
-  private async liveExpiringPointsForIds(db: SupabaseClient, customerIds: string[]): Promise<Map<string, number>> {
-    const map = new Map<string, number>();
-    if (customerIds.length === 0) return map;
-    const now = new Date();
-    const limit = new Date(now.getTime() + EXPIRING_WINDOW_DAYS * 86400000);
+  /** 1 lần gọi: bản ghi khách + điểm sắp hết hạn (embed point_lots) */
+  private async liveCustomerWithExpiring(
+    db: SupabaseClient,
+    column: 'id' | 'phone',
+    value: string
+  ): Promise<Customer | null> {
+    const window = expiringWindow();
     const { data, error } = await db
-      .from('point_lots')
-      .select('customer_id, remaining_points')
-      .eq('status', 'ACTIVE')
-      .gt('remaining_points', 0)
-      .gt('expires_at', now.toISOString())
-      .lte('expires_at', limit.toISOString())
-      .in('customer_id', customerIds);
-    if (error) throw new Error(error.message);
-    for (const row of data || []) {
-      map.set(row.customer_id, (map.get(row.customer_id) || 0) + Number(row.remaining_points || 0));
+      .from('customers')
+      .select(CUSTOMER_WITH_EXPIRING_LOTS)
+      .eq(column, value)
+      // Điều kiện trên `point_lots.*` chỉ lọc phần embed, không loại khách
+      .eq('point_lots.status', 'ACTIVE')
+      .gt('point_lots.remaining_points', 0)
+      .gt('point_lots.expires_at', window.from)
+      .lte('point_lots.expires_at', window.to)
+      .maybeSingle();
+    if (error) {
+      if (error.code === '22P02') return null; // id không đúng định dạng UUID
+      throw new Error(error.message);
     }
-    return map;
+    return data ? toCustomerWithExpiring(data as CustomerRowWithLots) : null;
   }
 
-  private async liveCustomerOrThrow(db: SupabaseClient, id: string): Promise<Customer> {
+  /** Ưu tiên bản ghi khách mà RPC trả kèm (`data.customer`); RPC bản cũ không có thì mới đọc lại DB */
+  private async liveCustomerOrThrow(db: SupabaseClient, id: string, fromRpc?: Customer | null): Promise<Customer> {
+    if (fromRpc) return fromRpc;
     const { data, error } = await db.from('customers').select('*').eq('id', id).maybeSingle();
     if (error || !data) throw new Error('Không tìm thấy khách hàng');
     return data as Customer;
@@ -306,7 +318,7 @@ class LoyaltyStore {
 
   public async getPointSettings(): Promise<PointSetting> {
     const db = getDatabase();
-    if (db) {
+    if (db && Date.now() - this.settingsLoadedAt > SETTINGS_CACHE_MS) {
       const { data, error } = await db
         .from('point_settings')
         .select('*')
@@ -324,6 +336,7 @@ class LoyaltyStore {
           bonus_tiers: data.bonus_tiers ?? this.settings.bonus_tiers,
         };
       }
+      this.settingsLoadedAt = Date.now();
     }
     return { ...this.settings, rounding_mode: 'FLOOR' };
   }
@@ -347,6 +360,7 @@ class LoyaltyStore {
       }
       if (res.error) throw new Error(res.error.message || 'Lỗi cập nhật cấu hình trên Database');
       this.settings = { ...this.settings, ...res.data, bonus_tiers: res.data.bonus_tiers ?? changes.bonus_tiers ?? this.settings.bonus_tiers };
+      this.settingsLoadedAt = 0; // đọc lại từ DB ngay bên dưới, bỏ cache cũ
     } else {
       this.settings = { ...this.settings, ...row };
     }
@@ -379,7 +393,20 @@ class LoyaltyStore {
 
     const db = getDatabase();
     if (db) {
-      let q = db.from('customers').select('*', { count: 'exact' });
+      // Lọc theo lô điểm ngay trong DB bằng embed `!inner` (chỉ giữ khách có lô khớp điều kiện),
+      // thay vì tải toàn bộ point_lots về server rồi truyền danh sách id.
+      let select = CUSTOMER_WITH_EXPIRING_LOTS;
+      if (filter === 'EXPIRING_SOON') select = '*, point_lots!inner(remaining_points)';
+      if (filter === 'EXPIRED') select = `${CUSTOMER_WITH_EXPIRING_LOTS}, expired_lots:point_lots!inner(id)`;
+
+      const window = expiringWindow();
+      let q = db
+        .from('customers')
+        .select(select, { count: 'exact' })
+        .eq('point_lots.status', 'ACTIVE')
+        .gt('point_lots.remaining_points', 0)
+        .gt('point_lots.expires_at', window.from)
+        .lte('point_lots.expires_at', window.to);
 
       if (search) {
         q = q.or(`phone.ilike.%${search}%,name.ilike.%${search}%`);
@@ -389,33 +416,8 @@ class LoyaltyStore {
         q = q.gt('total_points', 0);
       } else if (filter === 'NO_POINTS') {
         q = q.eq('total_points', 0);
-      } else if (filter === 'EXPIRING_SOON') {
-        const now = new Date();
-        const limit = new Date(now.getTime() + EXPIRING_WINDOW_DAYS * 86400000);
-        const expiringLots = await fetchAll<Pick<PointLot, 'customer_id'>>((f, t) =>
-          db
-            .from('point_lots')
-            .select('customer_id')
-            .eq('status', 'ACTIVE')
-            .gt('remaining_points', 0)
-            .gt('expires_at', now.toISOString())
-            .lte('expires_at', limit.toISOString())
-            .range(f, t)
-        );
-        const customerIds = Array.from(new Set(expiringLots.map((l) => l.customer_id)));
-        if (customerIds.length === 0) {
-          return { customers: [], total: 0, page: currentPage, pageSize: size, totalPages: 1 };
-        }
-        q = q.in('id', customerIds);
       } else if (filter === 'EXPIRED') {
-        const expiredLots = await fetchAll<Pick<PointLot, 'customer_id'>>((f, t) =>
-          db.from('point_lots').select('customer_id').eq('status', 'EXPIRED').range(f, t)
-        );
-        const customerIds = Array.from(new Set(expiredLots.map((l) => l.customer_id)));
-        if (customerIds.length === 0) {
-          return { customers: [], total: 0, page: currentPage, pageSize: size, totalPages: 1 };
-        }
-        q = q.in('id', customerIds);
+        q = q.eq('expired_lots.status', 'EXPIRED');
       }
 
       q = q.order('created_at', { ascending: false }).range(from, to);
@@ -423,14 +425,7 @@ class LoyaltyStore {
       const { data, count, error } = await q;
       if (error) throw new Error(error.message);
 
-      const customerRows = (data as Customer[]) || [];
-      const pageIds = customerRows.map((c) => c.id);
-      const expiringMap = await this.liveExpiringPointsForIds(db, pageIds);
-
-      const customers = customerRows.map((c) => ({
-        ...c,
-        expiring_soon_points: expiringMap.get(c.id) || 0,
-      }));
+      const customers = ((data as unknown as CustomerRowWithLots[]) || []).map(toCustomerWithExpiring);
 
       const total = count ?? customers.length;
       const totalPages = Math.ceil(total / size) || 1;
@@ -480,16 +475,7 @@ class LoyaltyStore {
 
   public async getCustomerById(id: string): Promise<Customer | null> {
     const db = getDatabase();
-    if (db) {
-      const { data, error } = await db.from('customers').select('*').eq('id', id).maybeSingle();
-      if (error) {
-        if (error.code === '22P02') return null; // id không đúng định dạng UUID
-        throw new Error(error.message);
-      }
-      if (!data) return null;
-      const expiring = await this.liveExpiringPoints(db, id);
-      return { ...(data as Customer), expiring_soon_points: expiring.get(id) || 0 };
-    }
+    if (db) return this.liveCustomerWithExpiring(db, 'id', id);
 
     this.syncAllCustomerBalances();
     const c = this.customers.find((item) => item.id === id);
@@ -501,13 +487,7 @@ class LoyaltyStore {
     if (!isValidVietnamesePhone(cleaned)) return null;
 
     const db = getDatabase();
-    if (db) {
-      const { data, error } = await db.from('customers').select('*').eq('phone', cleaned).maybeSingle();
-      if (error) throw new Error(error.message);
-      if (!data) return null;
-      const expiring = await this.liveExpiringPoints(db, data.id);
-      return { ...(data as Customer), expiring_soon_points: expiring.get(data.id) || 0 };
-    }
+    if (db) return this.liveCustomerWithExpiring(db, 'phone', cleaned);
 
     this.syncAllCustomerBalances();
     const c = this.customers.find((item) => item.phone === cleaned);
@@ -660,7 +640,10 @@ class LoyaltyStore {
         .select('*')
         .eq('customer_id', customerId)
         .order('expires_at', { ascending: true });
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (error.code === '22P02') return []; // id không đúng định dạng UUID
+        throw new Error(error.message);
+      }
       return (data as PointLot[]).map(withDaysLeft);
     }
 
@@ -881,21 +864,14 @@ class LoyaltyStore {
         p_reference_type: referenceType,
         p_reference_id: referenceId,
         p_created_by: actor.username,
+        // Điểm thưởng mốc được cộng trong cùng RPC (atomic, không tốn thêm 1 lần gọi)
+        p_bonus_points: bonusPoints,
+        p_bonus_reason: `Điểm thưởng mốc hóa đơn: ${matchedTier?.label || 'Mốc hóa đơn'} (+${bonusPoints} điểm)`,
       });
       if (error) throw new Error(error.message || 'Lỗi tích điểm trên Database');
 
       basePoints = data.points_earned;
-      if (bonusPoints > 0) {
-        const { error: bonusError } = await db.rpc('adjust_points_atomic', {
-          p_customer_id: data.customer_id,
-          p_points_delta: bonusPoints,
-          p_reason: `Điểm thưởng mốc hóa đơn: ${matchedTier?.label || 'Mốc hóa đơn'} (+${bonusPoints} điểm)`,
-          p_created_by: actor.username,
-        });
-        if (bonusError) console.error('Lỗi cộng điểm thưởng mốc:', bonusError.message);
-      }
-
-      customer = await this.liveCustomerOrThrow(db, data.customer_id);
+      customer = await this.liveCustomerOrThrow(db, data.customer_id, data.customer);
       transaction = {
         id: data.transaction_id,
         customer_id: customer.id,
@@ -971,7 +947,7 @@ class LoyaltyStore {
     }
 
     const pointsEarned = basePoints + bonusPoints;
-    await activityLogService.logActivity(
+    activityLogService.logActivityAfterResponse(
       actor,
       'POINTS_EARN',
       'POINT_TRANSACTION',
@@ -1017,7 +993,7 @@ class LoyaltyStore {
       });
       if (error) throw new Error(error.message || 'Lỗi trừ điểm trên Database');
 
-      customer = await this.liveCustomerOrThrow(db, input.customerId);
+      customer = await this.liveCustomerOrThrow(db, input.customerId, data.customer);
       transaction = {
         id: data.transaction_id,
         customer_id: customer.id,
@@ -1097,7 +1073,7 @@ class LoyaltyStore {
       customer = { ...existing };
     }
 
-    await activityLogService.logActivity(
+    activityLogService.logActivityAfterResponse(
       actor,
       'POINTS_REDEEM',
       'POINT_TRANSACTION',
@@ -1138,7 +1114,7 @@ class LoyaltyStore {
       });
       if (error) throw new Error(error.message || 'Lỗi điều chỉnh điểm trên Database');
 
-      customer = await this.liveCustomerOrThrow(db, input.customerId);
+      customer = await this.liveCustomerOrThrow(db, input.customerId, data.customer);
       transaction = {
         id: data.transaction_id,
         customer_id: customer.id,
@@ -1205,7 +1181,7 @@ class LoyaltyStore {
       customer = { ...existing };
     }
 
-    await activityLogService.logActivity(
+    activityLogService.logActivityAfterResponse(
       actor,
       'POINTS_ADJUST',
       'POINT_TRANSACTION',

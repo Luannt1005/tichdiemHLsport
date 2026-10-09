@@ -12,15 +12,15 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   try {
     const { id } = await params;
-    const customer = await loyaltyStore.getCustomerById(id);
-    if (!customer) {
-      return NextResponse.json({ error: 'Không tìm thấy khách hàng' }, { status: 404 });
-    }
-
-    const [lots, transactions] = await Promise.all([
+    // Chạy song song cả 3 query (1 vòng chờ DB thay vì 2)
+    const [customer, lots, transactions] = await Promise.all([
+      loyaltyStore.getCustomerById(id),
       loyaltyStore.getCustomerLots(id),
       loyaltyStore.getTransactions({ customerId: id }),
     ]);
+    if (!customer) {
+      return NextResponse.json({ error: 'Không tìm thấy khách hàng' }, { status: 404 });
+    }
     const detail: CustomerDetail = { ...customer, lots, transactions };
     return NextResponse.json(detail);
   } catch (err) {
